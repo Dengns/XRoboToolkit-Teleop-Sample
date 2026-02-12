@@ -2,130 +2,127 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 1. Project Overview
+## Project Overview
 
-*   **Purpose:** XR-based teleoperation framework for controlling robots through VR/AR devices in both simulation and hardware environments.
-*   **Tech Stack:** Python 3.10+, MuJoCo (physics simulation), Placo (inverse kinematics), XRoboToolkit SDK (VR/AR interface), various robot hardware APIs.
-*   **Architecture:** Controller-based design with base classes extended for specific simulation and hardware environments. Multi-threaded execution for real-time control, data logging, and camera streaming.
+XR-based teleoperation framework for controlling robots through VR/AR devices (Pico headsets via XRoboToolkit SDK) in both MuJoCo simulation and real hardware. Python 3.10+, uses Placo for inverse kinematics.
 
----
+## Setup and Commands
 
-## 2. Build, Test, and Run Commands
+```sh
+# Conda setup (Ubuntu 22.04/24.04)
+./setup_conda.sh --conda xr-robotics
+conda activate xr-robotics
+./setup_conda.sh --install
 
-*   **Environment Setup (Recommended):**
-    ```sh
-    # Setup conda environment (Ubuntu 22.04 tested)
-    ./setup_conda.sh --conda xr-robotics
-    conda activate xr-robotics
-    ./setup_conda.sh --install
-    ```
+# Alternative: system-wide
+./setup.sh
 
-*   **Alternative System Installation:**
-    ```sh
-    # System-wide installation (if not using conda)
-    ./setup.sh
-    ```
+# Format code (line length: 120)
+black .
 
-*   **Common Simulation Scripts:**
-    ```sh
-    # Dual UR5e arms in MuJoCo
-    python scripts/simulation/teleop_dual_ur5e_mujoco.py
-    
-    # ARX X7S with Placo visualization
-    python scripts/simulation/teleop_x7s_placo.py
-    
-    # Shadow Hand dexterous manipulation
-    python scripts/simulation/teleop_shadow_hand_mujoco.py
-    
-    # Flexiv Rizon4s robot
-    python scripts/simulation/teleop_flexiv_rizon4s_mujoco.py
-    ```
+# Run simulation examples
+python scripts/simulation/teleop_dual_ur5e_mujoco.py
+python scripts/simulation/teleop_shadow_hand_mujoco.py
 
-*   **Hardware Scripts:**
-    ```sh
-    # Dual UR5e with reset option
-    python scripts/hardware/teleop_dual_ur5e_hardware.py --reset
-    
-    # ARX R5 robotic arm
-    python scripts/hardware/teleop_arx_hardware.py
-    
-    # Galaxea R1 Lite humanoid
-    python scripts/hardware/teleop_r1lite_hardware.py
-    ```
+# Run hardware examples
+python scripts/hardware/teleop_dual_ur5e_hardware.py --reset
+```
 
-*   **Code Formatting:**
-    ```sh
-    # Format all Python code (line length: 120)
-    black .
-    ```
+There is no test suite. Validation is done via simulation/hardware demo scripts and `scripts/misc/test_data_log_analysis.py` for inspecting logged `.pkl` files.
 
----
+## Architecture
 
-## 3. Dependency Management
+### Controller Hierarchy
 
-*   **Primary Tools:** Conda (recommended), pip, custom shell scripts
-*   **Key Dependencies:** 
-    - XRoboToolkit SDK (proprietary VR/AR interface)
-    - placo==0.9.4 (inverse kinematics solver)
-    - mujoco (physics simulation)
-    - ur_rtde (Universal Robots interface)
-    - dynamixel-sdk (servo control)
-*   **Configuration Files:** `pyproject.toml`, `setup_conda.sh`, `setup.sh`
+```
+BaseTeleopController (abstract)
+├── MujocoTeleopController          # MuJoCo simulation (single-threaded viewer loop)
+├── PlacoTeleopController           # Placo IK visualization only (meshcat)
+└── HardwareTeleopController (abstract)
+    ├── DualArmURController         # Dual UR5e arms
+    ├── ARXTeleopController         # ARX R5 arms (CAN bus)
+    └── GalaxeaR1LiteTeleopController  # Galaxea R1 Lite humanoid
+```
 
----
+`BaseTeleopController` owns the Placo IK solver, XrClient, and the core `_update_ik()` loop. Subclasses implement `_robot_setup()`, `_update_robot_state()`, `_send_command()`, `_get_link_pose()`, and `run()`.
 
-## 4. Coding Style and Conventions
+`HardwareTeleopController` adds multi-threaded execution: separate threads for IK solving (`_ik_thread`), robot command sending (`_control_thread`), data logging (`_data_logging_thread`), and camera streaming (`_camera_thread`).
 
-*   **Code Style:** PEP 8
-*   **Formatter:** `black` (line length: 120)
-*   **Naming Conventions:** `snake_case` for variables and functions, `PascalCase` for classes.
-*   **Key Architectural Patterns:** Controller-based architecture with inheritance hierarchy. `BaseTeleopController` provides common interface, extended by `HardwareTeleopController` for hardware-specific features (threading, logging, cameras).
+### Control Flow
 
-### Core Architecture
+1. XR device input → `XrClient` (wraps `xrt` SDK)
+2. Grip activation check (`control_trigger > 0.9`) → delta pose computation via `_process_xr_pose()`
+3. Placo IK solver updates frame/position tasks → `solver.solve(True)`
+4. `_send_command()` pushes joint targets to hardware/simulation
 
-The project uses a layered architecture with clear separation of concerns:
+### manipulator_config Dict (Central Configuration)
 
-*   **Base Layer (`xrobotoolkit_teleop/common/`):**
-    - `BaseTeleopController`: Abstract base class defining teleoperation interface
-    - `HardwareTeleopController`: Adds hardware-specific features (threading, logging, camera support)
+Every controller is parameterized by a `manipulator_config` dict. This is the key structure for adding robot support:
 
-*   **Interface Layer (`xrobotoolkit_teleop/hardware/interface/`):**
-    - Low-level wrappers for hardware communication (robots, grippers, cameras)
-    - Each hardware type has its own interface class (e.g., `RobotiqGripperInterface`, `URRobotInterface`)
+```python
+{
+    "right_hand": {
+        "link_name": "right_tool0",           # URDF link for IK target
+        "pose_source": "right_controller",     # XrClient pose source
+        "control_trigger": "right_grip",       # Grip button to activate
+        "control_mode": "pose",                # "pose" (6DOF) or "position" (3DOF)
+        "gripper_config": {                    # Optional
+            "type": "parallel",
+            "gripper_trigger": "right_trigger",
+            "joint_names": ["right_finger_joint"],
+            "open_pos": [0.0],
+            "close_pos": [0.8],
+        },
+        "motion_tracker": {                    # Optional, for redundant arms
+            "serial": "tracker_serial_number",
+            "link_target": "elbow_link",
+        },
+    },
+}
+```
 
-*   **Controller Layer:**
-    - **Simulation**: `MujocoTeleopController`, `PlacoTeleopController`
-    - **Hardware**: Robot-specific controllers (e.g., `ARXTeleopController`, `DualArmURController`)
+### XrClient API
 
-*   **Control Flow:**
-    1. XR device captures user input → `XrClient`
-    2. Pose processing and IK target updates → `BaseTeleopController`
-    3. Inverse kinematics solving → Placo solver
-    4. Command execution → Hardware/simulation interfaces
-    5. Concurrent: Data logging, camera streaming, visualization
+`XrClient` wraps the XRoboToolkit SDK. Key methods and their valid arguments:
 
----
+- `get_pose_by_name(name)` → `np.ndarray[7]` as `[x,y,z,qx,qy,qz,qw]`
+  - Names: `"left_controller"`, `"right_controller"`, `"headset"`
+- `get_key_value_by_name(name)` → `float` in `[0,1]`
+  - Names: `"left_trigger"`, `"right_trigger"`, `"left_grip"`, `"right_grip"`
+- `get_button_state_by_name(name)` → `bool`
+  - Names: `"A"`, `"B"`, `"X"`, `"Y"`, `"left_menu_button"`, `"right_menu_button"`, `"left_axis_click"`, `"right_axis_click"`
+- `get_hand_tracking_state(hand)` → `np.ndarray[27,7]` or `None` — `"left"` / `"right"`
+- `get_joystick_state(controller)` → `list[2]` — `"left"` / `"right"`
+- `get_motion_tracker_data()` → `dict` keyed by tracker serial
+- `get_body_tracking_data()` → `dict` or `None`
 
-## 5. Key Files and Directories
+**Quaternion convention:** XrClient returns `[qx,qy,qz,qw]`, but internally the codebase converts to `[w,x,y,z]` for `meshcat.transformations` (used by Placo). Watch for this when processing poses.
 
-*   `pyproject.toml`: Project metadata and Python package dependencies.
-*   `setup_conda.sh`, `setup.sh`: Installation scripts for conda/system environments.
-*   `assets/`: Contains URDF models, meshes, and robot configurations.
-*   `scripts/simulation/`: High-level teleoperation scripts for MuJoCo and Placo environments.
-*   `scripts/hardware/`: High-level teleoperation scripts for physical robots.
-*   `xrobotoolkit_teleop/`: Core Python package containing all teleoperation logic.
-*   `xrobotoolkit_teleop/common/base_teleop_controller.py`: Abstract base class for all controllers.
-*   `xrobotoolkit_teleop/common/base_hardware_teleop_controller.py`: Hardware base class with threading and logging.
-*   `xrobotoolkit_teleop/hardware/interface/`: Low-level hardware communication wrappers.
-*   `xrobotoolkit_teleop/simulation/`: Controllers for MuJoCo and Placo environments.
-*   `dependencies/`: External dependencies cloned during setup (ARX SDK, XRoboToolkit).
+### Headset-to-World Transform
 
----
+All XR poses are in headset-relative coordinates and must be transformed to the robot world frame:
 
-## 6. Development Guidelines
+```python
+R_HEADSET_TO_WORLD = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
+```
 
-*   **Adding New Robots:** Extend appropriate base controller class, implement required abstract methods, create interface wrapper in `hardware/interface/` if needed.
-*   **Threading Model:** Hardware controllers use separate threads for IK computation, robot control, data logging, and camera streaming.
-*   **Configuration:** Robot-specific settings defined as dictionaries in controller classes (joint limits, IK constraints, camera parameters).
-*   **Asset Paths:** Always use absolute paths for URDF loading, leveraging `path_utils` module for cross-platform compatibility.
-*   **Error Handling:** Hardware controllers implement safety checks and manipulability constraints to prevent dangerous robot movements.
+This is passed as `R_headset_world` to controller constructors. The transform is applied in `_process_xr_pose()` to both position (matrix multiply) and orientation (sandwich quaternion product).
+
+### MuJoCo ↔ Placo Conversion
+
+`xrobotoolkit_teleop/utils/mujoco_utils.py` handles bidirectional joint state conversion between MuJoCo's `qpos` format and Placo/Pinocchio's `q` format. These differ in joint ordering and floating-base representation. Use `calc_mujoco_qpos_from_placo_q()` and `calc_placo_q_from_mujoco_qpos()`.
+
+### Hardware Interface Layer
+
+`xrobotoolkit_teleop/hardware/interface/` contains low-level wrappers for each hardware type. Each interface encapsulates a single communication protocol (RTDE for UR robots, CAN for ARX, Dynamixel SDK for servos, librealsense for cameras). Camera interfaces extend `BaseCameraInterface` which defines the `start()`/`stop()`/`get_frames()`/`get_compressed_frames()` contract.
+
+### Data Logging
+
+Hardware controllers support data collection via the `DataLogger` class. Users toggle logging with the B button and discard a session with right-axis-click. Logs are saved as timestamped `.pkl` files in `logs/`. Each entry contains: `timestamp`, `qpos`, `qvel`, `qpos_des`, and optionally `image` (compressed JPG frames keyed by camera name).
+
+## Coding Conventions
+
+- **Formatter:** `black` with line length 120
+- **Style:** PEP 8, `snake_case` for functions/variables, `PascalCase` for classes
+- **Asset paths:** Always use absolute paths via `path_utils.ASSET_PATH`, never relative paths for URDF loading
+- **Adding a new robot:** Extend `BaseTeleopController` (simulation) or `HardwareTeleopController` (hardware), implement the abstract methods, define a `manipulator_config` dict, and add a hardware interface in `hardware/interface/` if needed
