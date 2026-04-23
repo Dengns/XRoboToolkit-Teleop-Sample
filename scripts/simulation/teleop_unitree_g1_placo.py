@@ -22,7 +22,8 @@ def main(
             "pose_source": "left_controller",
             "control_trigger": "left_grip",
             "motion_tracker": {
-                "serial": "PC2310BLH9020707B",
+#                "serial": "PC2310BLH9020707B",
+                "serial": "PC2310MLL3200347G",
                 "link_target": "left_elbow_link",
             },
         },
@@ -31,7 +32,8 @@ def main(
             "pose_source": "right_controller",
             "control_trigger": "right_grip",
             "motion_tracker": {
-                "serial": "PC2310BLH9020740B",
+#                "serial": "PC2310BLH9020740B",
+                "serial": "PC2310MLL3200338G",
                 "link_target": "right_elbow_link",
             },
         },

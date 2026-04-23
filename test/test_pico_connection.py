@@ -26,8 +26,17 @@ def main():
             button_a = xr_client.get_button_state_by_name("A")
             print(f"A按键: {button_a}")
 
+            # 读取体感传感器
+            data = xr_client.get_motion_tracker_data()
+            for serial, metrics in data.items():
+                print(f"设备序列号: {serial}")
+                print(f"  - 位姿 (Pose): {metrics['pose']}")
+                print(f"  - 速度 (Velocity): {metrics['velocity']}")
+                print(f"  - 加速度 (Acceleration): {metrics['acceleration']}")
+                print("-" * 20)
+                
             print("---")
-            time.sleep(0.5)  # 每0.5秒读一次
+            time.sleep(0.5)  # 每2秒读一次
 
     except KeyboardInterrupt:
         print("\n用户中断")
