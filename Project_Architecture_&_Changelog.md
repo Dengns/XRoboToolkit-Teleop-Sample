@@ -92,3 +92,13 @@
   - 将 `RealmanXrIncrementalTeleop` 从 ROS2 `Node` 改为普通 Python 控制类，默认使用 `time.sleep()` 定频循环。
   - 新增 `--enable-ros-publish` 参数，仅在显式启用时按需导入 `rclpy` 并发布 `/action`、`/state`。
   - 增加纯 Python 日志输出，保证没有 ROS2 时仍可运行核心 RealMan 末端增量控制逻辑。
+
+### [2026-04-24]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户反馈一次控制移动到某位置后，松开按键并移动遥控器，再次按下时机械臂不响应，必须把遥控器移回上一次松开附近才会重新开始。
+  - 代码排查发现 `control_loop()` 在判断 `active` 后无论是否松开都会先读取 `controller_xyz`；如果松开后手柄 pose 短暂无效或读取异常，会在执行 `deactivate_control()` 前进入异常分支，导致上一轮 `controller_origin_xyz` / `arm_origin_pose` 未清空。
+- **具体修改内容**:
+  - 调整 `test/realman_contrl_lxqs.py` 的控制循环顺序。
+  - 当 `right_grip` 未激活时，优先执行 `deactivate_control()`、发布状态并立即返回，不再依赖当前手柄位姿。
+  - 仅在确认处于按住控制状态后读取右手柄 xyz 并发送 `rm_movep_canfd()`，保证下一次按下必定以新的手柄位置作为原点。

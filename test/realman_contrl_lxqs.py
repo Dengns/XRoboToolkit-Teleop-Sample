@@ -219,14 +219,20 @@ class RealmanXrIncrementalTeleop:
         assert self.xr_client is not None
         try:
             active = self.is_control_active()
+
+            # 松开时必须先清空控制引用；不要再依赖当前手柄 pose，
+            # 否则松开瞬间定位异常会跳过 deactivate_control()，留下旧原点。
+            if not active:
+                if self.was_active:
+                    self.deactivate_control()
+                self.publish_state()
+                return
+
             controller_xyz = read_controller_xyz(self.xr_client)
 
-            if active:
-                if not self.was_active:
-                    self.activate_control(controller_xyz)
-                self.send_target_pose(controller_xyz)
-            elif self.was_active:
-                self.deactivate_control()
+            if not self.was_active:
+                self.activate_control(controller_xyz)
+            self.send_target_pose(controller_xyz)
 
             self.publish_state()
         except Exception as exc:
