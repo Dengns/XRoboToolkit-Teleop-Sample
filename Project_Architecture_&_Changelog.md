@@ -23,7 +23,7 @@
 | `test/test_pico_connection.py` | `main` | Pico 连接与数据读取快速联调脚本 | 输出手柄、按键、体感数据 |
 | `test/test_trigger.py` | 顶层循环脚本 | 快速验证右手 trigger/grip 变化 | 最小化输入链路验证 |
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
-| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_xyz` / `read_arm_pose` | 使用 Pico 右手柄按住 grip 后的相对 xyz 位移直连控制 RM75-B 末端 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
+| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
 
 ## 3. 变更与 Bug 追踪日志 (Changelog)
 ### [2026-04-24]
@@ -102,3 +102,16 @@
   - 调整 `test/realman_contrl_lxqs.py` 的控制循环顺序。
   - 当 `right_grip` 未激活时，优先执行 `deactivate_control()`、发布状态并立即返回，不再依赖当前手柄位姿。
   - 仅在确认处于按住控制状态后读取右手柄 xyz 并发送 `rm_movep_canfd()`，保证下一次按下必定以新的手柄位置作为原点。
+
+### [2026-04-24]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户希望 `test/realman_contrl_lxqs.py` 不只透传 xyz，也尝试透传 rpy 姿态。
+  - 用户要求新增用于计算“透传数据和实际数据比例”的控制比例，且 xyz 与 rpy 分开配置，默认值均为 1。
+- **具体修改内容**:
+  - 新增 `DEFAULT_XYZ_SCALE_FACTOR = 1.0` 和 `DEFAULT_RPY_SCALE_FACTOR = 1.0`。
+  - 将配置字段从单一 `scale_factor` 拆分为 `xyz_scale_factor` 与 `rpy_scale_factor`。
+  - 新增 `read_controller_pose()`：读取右手柄 `[x,y,z,qx,qy,qz,qw]`，将位置和四元数转换到项目控制坐标系，并输出 `xyz+rpy`。
+  - 控制激活时同时记录右手柄 `xyz+rpy` 原点；按住期间分别计算 `delta_xyz` 和 `delta_rpy`，拼成完整 `[x,y,z,rx,ry,rz]` 后通过 `rm_movep_canfd()` 透传。
+  - 新增命令行参数 `--xyz-scale`、`--rpy-scale`，保留旧 `--scale` 作为 `--xyz-scale` 兼容参数。
+  - ROS2 可选发布数据从 `xyz+active` 扩展为 `xyz+rpy+active`。

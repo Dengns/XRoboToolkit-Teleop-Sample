@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""使用 Pico 右手柄相对位移控制 RealMan RM75-B 末端 xyz。"""
+"""使用 Pico 右手柄相对位姿控制 RealMan RM75-B 末端 xyz+rpy。"""
 
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ from xrobotoolkit_teleop.utils.geometry import R_HEADSET_TO_WORLD
 DEFAULT_ARM_IP = "192.168.5.73"
 DEFAULT_ARM_PORT = 8080
 DEFAULT_CONTROL_RATE_HZ = 50
-DEFAULT_SCALE_FACTOR = 1.0
+DEFAULT_XYZ_SCALE_FACTOR = 1.0
+DEFAULT_RPY_SCALE_FACTOR = 1.0
 DEFAULT_GRIP_THRESHOLD = 0.9
 DEFAULT_MAX_DELTA_M = 0.25
 
@@ -35,7 +36,8 @@ class TeleopConfig:
     arm_ip: str
     arm_port: int
     control_rate_hz: int
-    scale_factor: float
+    xyz_scale_factor: float
+    rpy_scale_factor: float
     grip_threshold: float
     max_delta_m: float
     high_follow: bool
@@ -66,12 +68,64 @@ def read_arm_pose(arm: RM75BInterface) -> np.ndarray:
     return pose[:6].copy()
 
 
-def read_controller_xyz(xr_client: XrClient) -> np.ndarray:
-    """读取右手柄 SDK xyz，并转换到项目现有控制坐标系。"""
+def wrap_angle(angle: np.ndarray | float) -> np.ndarray | float:
+    """将角度归一到 [-pi, pi]，避免跨 pi 时产生大跳变。"""
+    return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
+
+def quaternion_xyzw_to_rotation_matrix(quat_xyzw: np.ndarray) -> np.ndarray:
+    """将 SDK 返回的 xyzw 四元数转换成 3x3 旋转矩阵。"""
+    quat = np.asarray(quat_xyzw, dtype=float)
+    norm = np.linalg.norm(quat)
+    if norm <= 1.0e-9 or not np.all(np.isfinite(quat)):
+        raise RuntimeError(f"右手柄四元数无效: {quat_xyzw}")
+
+    x, y, z, w = quat / norm
+    return np.array(
+        [
+            [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
+            [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
+            [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
+        ],
+        dtype=float,
+    )
+
+
+def rotation_matrix_to_rpy(rotation_matrix: np.ndarray) -> np.ndarray:
+    """将旋转矩阵转换为 roll/pitch/yaw，单位 rad。"""
+    r = np.asarray(rotation_matrix, dtype=float)
+    sy = float(np.hypot(r[0, 0], r[1, 0]))
+    singular = sy < 1.0e-6
+
+    if not singular:
+        roll = np.arctan2(r[2, 1], r[2, 2])
+        pitch = np.arctan2(-r[2, 0], sy)
+        yaw = np.arctan2(r[1, 0], r[0, 0])
+    else:
+        roll = np.arctan2(-r[1, 2], r[1, 1])
+        pitch = np.arctan2(-r[2, 0], sy)
+        yaw = 0.0
+
+    return np.asarray([roll, pitch, yaw], dtype=float)
+
+
+def read_controller_pose(xr_client: XrClient) -> tuple[np.ndarray, np.ndarray]:
+    """读取右手柄 SDK pose，并转换到项目现有控制坐标系的 xyz+rpy。"""
     pose = np.asarray(xr_client.get_pose_by_name("right_controller"), dtype=float)
-    if pose.shape[0] < 3 or not np.all(np.isfinite(pose[:3])):
+    if pose.shape[0] < 7 or not np.all(np.isfinite(pose[:7])):
         raise RuntimeError(f"右手柄位姿无效: {pose}")
-    return R_HEADSET_TO_WORLD @ pose[:3]
+
+    controller_xyz = R_HEADSET_TO_WORLD @ pose[:3]
+    controller_rotation = quaternion_xyzw_to_rotation_matrix(pose[3:7])
+    controller_rotation = R_HEADSET_TO_WORLD @ controller_rotation @ R_HEADSET_TO_WORLD.T
+    controller_rpy = rotation_matrix_to_rpy(controller_rotation)
+    return controller_xyz, controller_rpy
+
+
+def read_controller_xyz(xr_client: XrClient) -> np.ndarray:
+    """兼容旧调用：只读取右手柄 xyz。"""
+    controller_xyz, _ = read_controller_pose(xr_client)
+    return controller_xyz
 
 
 def clip_delta(delta_xyz: np.ndarray, max_delta_m: float) -> np.ndarray:
@@ -82,7 +136,7 @@ def clip_delta(delta_xyz: np.ndarray, max_delta_m: float) -> np.ndarray:
 
 
 class RealmanXrIncrementalTeleop:
-    """右手 grip 按住时，用手柄相对位移驱动 RM75-B 末端 xyz。"""
+    """右手 grip 按住时，用手柄相对位姿驱动 RM75-B 末端 xyz+rpy。"""
 
     def __init__(self, config: TeleopConfig):
         self.config = config
@@ -95,6 +149,7 @@ class RealmanXrIncrementalTeleop:
         self.actual_pub: Any | None = None
 
         self.controller_origin_xyz: np.ndarray | None = None
+        self.controller_origin_rpy: np.ndarray | None = None
         self.arm_origin_pose: np.ndarray | None = None
         self.target_pose: np.ndarray | None = None
         self.was_active = False
@@ -103,7 +158,9 @@ class RealmanXrIncrementalTeleop:
         if self.config.enable_ros_publish:
             self.init_ros_publishers()
         self.init_hardware()
-        self.log_info("初始化完成：按住右手 grip 控制机械臂，松开停止并清空追踪原点。")
+        self.log_info(
+            "初始化完成：按住右手 grip 控制机械臂 xyz+rpy，松开停止并清空追踪原点。"
+        )
 
     def log_info(self, message: str):
         if self.ros_node is not None:
@@ -147,15 +204,17 @@ class RealmanXrIncrementalTeleop:
         grip_value = float(self.xr_client.get_key_value_by_name("right_grip"))
         return grip_value >= self.config.grip_threshold
 
-    def activate_control(self, controller_xyz: np.ndarray):
+    def activate_control(self, controller_xyz: np.ndarray, controller_rpy: np.ndarray):
         assert self.arm is not None
         self.controller_origin_xyz = controller_xyz.copy()
+        self.controller_origin_rpy = controller_rpy.copy()
         self.arm_origin_pose = read_arm_pose(self.arm)
         self.target_pose = self.arm_origin_pose.copy()
         self.was_active = True
         self.log_info(
             "右手 grip 已按下，记录控制原点: "
             f"controller_xyz={self.controller_origin_xyz.tolist()}, "
+            f"controller_rpy={self.controller_origin_rpy.tolist()}, "
             f"arm_pose={self.arm_origin_pose.tolist()}"
         )
 
@@ -172,20 +231,24 @@ class RealmanXrIncrementalTeleop:
             self.log_warning(str(exc))
 
         self.controller_origin_xyz = None
+        self.controller_origin_rpy = None
         self.arm_origin_pose = None
         self.was_active = False
         self.log_info("右手 grip 已松开，停止发送位姿透传并清空追踪原点。")
 
-    def send_target_pose(self, controller_xyz: np.ndarray):
+    def send_target_pose(self, controller_xyz: np.ndarray, controller_rpy: np.ndarray):
         assert self.arm is not None
         assert self.controller_origin_xyz is not None
+        assert self.controller_origin_rpy is not None
         assert self.arm_origin_pose is not None
 
-        delta_xyz = (controller_xyz - self.controller_origin_xyz) * self.config.scale_factor
+        delta_xyz = (controller_xyz - self.controller_origin_xyz) * self.config.xyz_scale_factor
         delta_xyz = clip_delta(delta_xyz, self.config.max_delta_m)
+        delta_rpy = wrap_angle(controller_rpy - self.controller_origin_rpy) * self.config.rpy_scale_factor
 
         target_pose = self.arm_origin_pose.copy()
         target_pose[:3] = self.arm_origin_pose[:3] + delta_xyz
+        target_pose[3:6] = wrap_angle(self.arm_origin_pose[3:6] + delta_rpy)
         self.target_pose = target_pose
 
         ret = self.arm.arm.rm_movep_canfd(target_pose.tolist(), follow=self.config.high_follow)
@@ -208,11 +271,11 @@ class RealmanXrIncrementalTeleop:
 
         if self.target_pose is not None:
             action_msg = self.float32_multi_array_cls()
-            action_msg.data = self.target_pose[:3].astype(float).tolist() + [1.0 if self.was_active else 0.0]
+            action_msg.data = self.target_pose[:6].astype(float).tolist() + [1.0 if self.was_active else 0.0]
             self.target_pub.publish(action_msg)
 
         state_msg = self.float32_multi_array_cls()
-        state_msg.data = actual_pose[:3].astype(float).tolist() + [1.0 if self.was_active else 0.0]
+        state_msg.data = actual_pose[:6].astype(float).tolist() + [1.0 if self.was_active else 0.0]
         self.actual_pub.publish(state_msg)
 
     def control_loop(self):
@@ -228,11 +291,11 @@ class RealmanXrIncrementalTeleop:
                 self.publish_state()
                 return
 
-            controller_xyz = read_controller_xyz(self.xr_client)
+            controller_xyz, controller_rpy = read_controller_pose(self.xr_client)
 
             if not self.was_active:
-                self.activate_control(controller_xyz)
-            self.send_target_pose(controller_xyz)
+                self.activate_control(controller_xyz, controller_rpy)
+            self.send_target_pose(controller_xyz, controller_rpy)
 
             self.publish_state()
         except Exception as exc:
@@ -281,11 +344,13 @@ class RealmanXrIncrementalTeleop:
 
 
 def parse_args(argv: list[str] | None = None) -> TeleopConfig:
-    parser = argparse.ArgumentParser(description="Pico 右手柄相对位移控制 RealMan RM75-B xyz")
+    parser = argparse.ArgumentParser(description="Pico 右手柄相对位姿控制 RealMan RM75-B xyz+rpy")
     parser.add_argument("--ip", default=DEFAULT_ARM_IP, help="RM75-B 控制器 IP")
     parser.add_argument("--port", type=int, default=DEFAULT_ARM_PORT, help="RM75-B 控制器端口")
     parser.add_argument("--rate", type=int, default=DEFAULT_CONTROL_RATE_HZ, help="控制频率 Hz")
-    parser.add_argument("--scale", type=float, default=DEFAULT_SCALE_FACTOR, help="手柄位移到机械臂位移的比例")
+    parser.add_argument("--xyz-scale", type=float, default=DEFAULT_XYZ_SCALE_FACTOR, help="手柄 xyz 位移到机械臂 xyz 位移的比例")
+    parser.add_argument("--rpy-scale", type=float, default=DEFAULT_RPY_SCALE_FACTOR, help="手柄 rpy 转动到机械臂 rpy 转动的比例")
+    parser.add_argument("--scale", type=float, default=None, help="兼容旧参数：等同于 --xyz-scale")
     parser.add_argument("--grip-threshold", type=float, default=DEFAULT_GRIP_THRESHOLD, help="右手 grip 激活阈值")
     parser.add_argument("--max-delta", type=float, default=DEFAULT_MAX_DELTA_M, help="单次按住允许的最大 xyz 相对位移，单位 m；<=0 表示不限制")
     parser.add_argument("--high-follow", action="store_true", help="启用 CANFD 高跟随；仅在控制周期稳定不超过 10ms 时使用")
@@ -297,7 +362,8 @@ def parse_args(argv: list[str] | None = None) -> TeleopConfig:
         arm_ip=args.ip,
         arm_port=args.port,
         control_rate_hz=args.rate,
-        scale_factor=args.scale,
+        xyz_scale_factor=args.xyz_scale if args.scale is None else args.scale,
+        rpy_scale_factor=args.rpy_scale,
         grip_threshold=args.grip_threshold,
         max_delta_m=args.max_delta,
         high_follow=args.high_follow,
