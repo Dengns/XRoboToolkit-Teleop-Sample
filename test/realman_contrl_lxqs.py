@@ -27,6 +27,8 @@ DEFAULT_ARM_PORT = 8080
 DEFAULT_CONTROL_RATE_HZ = 50
 DEFAULT_XYZ_SCALE_FACTOR = 1.0
 DEFAULT_RPY_SCALE_FACTOR = 1.0
+DEFAULT_RPY_AXIS_MAP = (1, 0, 2)
+DEFAULT_RPY_AXIS_SIGN = (1.0, 1.0, 1.0)
 DEFAULT_GRIP_THRESHOLD = 0.9
 DEFAULT_MAX_DELTA_M = 0.25
 
@@ -38,6 +40,8 @@ class TeleopConfig:
     control_rate_hz: int
     xyz_scale_factor: float
     rpy_scale_factor: float
+    rpy_axis_map: tuple[int, int, int]
+    rpy_axis_sign: tuple[float, float, float]
     grip_threshold: float
     max_delta_m: float
     high_follow: bool
@@ -71,6 +75,30 @@ def read_arm_pose(arm: RM75BInterface) -> np.ndarray:
 def wrap_angle(angle: np.ndarray | float) -> np.ndarray | float:
     """将角度归一到 [-pi, pi]，避免跨 pi 时产生大跳变。"""
     return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
+
+def parse_rpy_axis_map(value: str) -> tuple[int, int, int]:
+    """解析 rpy 轴映射，例如 1,0,2 表示交换 roll/pitch，yaw 保持不变。"""
+    try:
+        axis_map = tuple(int(item.strip()) for item in value.split(","))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("rpy 轴映射必须是逗号分隔的整数，例如 1,0,2") from exc
+
+    if len(axis_map) != 3 or sorted(axis_map) != [0, 1, 2]:
+        raise argparse.ArgumentTypeError("rpy 轴映射必须包含且只包含 0,1,2，例如 1,0,2")
+    return axis_map
+
+
+def parse_rpy_axis_sign(value: str) -> tuple[float, float, float]:
+    """解析 rpy 轴方向，例如 1,-1,1 表示反转第二个旋转通道。"""
+    try:
+        signs = tuple(float(item.strip()) for item in value.split(","))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("rpy 轴方向必须是逗号分隔数字，例如 1,-1,1") from exc
+
+    if len(signs) != 3 or any(sign not in (-1.0, 1.0) for sign in signs):
+        raise argparse.ArgumentTypeError("rpy 轴方向只能由 1 或 -1 组成，例如 1,-1,1")
+    return signs
 
 
 def quaternion_xyzw_to_rotation_matrix(quat_xyzw: np.ndarray) -> np.ndarray:
@@ -244,7 +272,9 @@ class RealmanXrIncrementalTeleop:
 
         delta_xyz = (controller_xyz - self.controller_origin_xyz) * self.config.xyz_scale_factor
         delta_xyz = clip_delta(delta_xyz, self.config.max_delta_m)
-        delta_rpy = wrap_angle(controller_rpy - self.controller_origin_rpy) * self.config.rpy_scale_factor
+        raw_delta_rpy = wrap_angle(controller_rpy - self.controller_origin_rpy)
+        delta_rpy = raw_delta_rpy[list(self.config.rpy_axis_map)]
+        delta_rpy = delta_rpy * np.asarray(self.config.rpy_axis_sign) * self.config.rpy_scale_factor
 
         target_pose = self.arm_origin_pose.copy()
         target_pose[:3] = self.arm_origin_pose[:3] + delta_xyz
@@ -350,6 +380,8 @@ def parse_args(argv: list[str] | None = None) -> TeleopConfig:
     parser.add_argument("--rate", type=int, default=DEFAULT_CONTROL_RATE_HZ, help="控制频率 Hz")
     parser.add_argument("--xyz-scale", type=float, default=DEFAULT_XYZ_SCALE_FACTOR, help="手柄 xyz 位移到机械臂 xyz 位移的比例")
     parser.add_argument("--rpy-scale", type=float, default=DEFAULT_RPY_SCALE_FACTOR, help="手柄 rpy 转动到机械臂 rpy 转动的比例")
+    parser.add_argument("--rpy-axis-map", type=parse_rpy_axis_map, default=DEFAULT_RPY_AXIS_MAP, help="rpy 通道映射，默认 1,0,2 表示交换 roll/pitch 并保持 yaw")
+    parser.add_argument("--rpy-axis-sign", type=parse_rpy_axis_sign, default=DEFAULT_RPY_AXIS_SIGN, help="rpy 通道方向，默认 1,1,1；如某轴方向反了可设为 -1")
     parser.add_argument("--scale", type=float, default=None, help="兼容旧参数：等同于 --xyz-scale")
     parser.add_argument("--grip-threshold", type=float, default=DEFAULT_GRIP_THRESHOLD, help="右手 grip 激活阈值")
     parser.add_argument("--max-delta", type=float, default=DEFAULT_MAX_DELTA_M, help="单次按住允许的最大 xyz 相对位移，单位 m；<=0 表示不限制")
@@ -364,6 +396,8 @@ def parse_args(argv: list[str] | None = None) -> TeleopConfig:
         control_rate_hz=args.rate,
         xyz_scale_factor=args.xyz_scale if args.scale is None else args.scale,
         rpy_scale_factor=args.rpy_scale,
+        rpy_axis_map=args.rpy_axis_map,
+        rpy_axis_sign=args.rpy_axis_sign,
         grip_threshold=args.grip_threshold,
         max_delta_m=args.max_delta,
         high_follow=args.high_follow,

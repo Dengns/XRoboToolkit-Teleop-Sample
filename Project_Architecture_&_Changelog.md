@@ -115,3 +115,14 @@
   - 控制激活时同时记录右手柄 `xyz+rpy` 原点；按住期间分别计算 `delta_xyz` 和 `delta_rpy`，拼成完整 `[x,y,z,rx,ry,rz]` 后通过 `rm_movep_canfd()` 透传。
   - 新增命令行参数 `--xyz-scale`、`--rpy-scale`，保留旧 `--scale` 作为 `--xyz-scale` 兼容参数。
   - ROS2 可选发布数据从 `xyz+active` 扩展为 `xyz+rpy+active`。
+
+### [2026-04-24]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户实机反馈当前以 xy 为水平面的坐标系中，水平面旋转映射正确，但另外两个旋转通道（绕轴心旋转与上下旋转）对应关系反了。
+  - 代码排查发现 `send_target_pose()` 将 `raw_delta_rpy=[roll,pitch,yaw]` 直接加到机械臂 `[rx,ry,rz]`，没有提供通道重排。
+- **具体修改内容**:
+  - 新增 `DEFAULT_RPY_AXIS_MAP = (1, 0, 2)`，默认交换 roll/pitch 两个通道，保持 yaw 不变。
+  - 新增 `DEFAULT_RPY_AXIS_SIGN = (1.0, 1.0, 1.0)` 和命令行参数 `--rpy-axis-sign`，用于后续单独反转某个旋转通道方向。
+  - 新增 `--rpy-axis-map` 参数，允许实机继续调整 rpy 到机械臂 rx/ry/rz 的映射关系。
+  - 在 `send_target_pose()` 中先按 `rpy_axis_map` 重排 `raw_delta_rpy`，再按 `rpy_axis_sign` 和 `rpy_scale_factor` 生成透传姿态增量。
