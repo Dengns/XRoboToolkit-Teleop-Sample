@@ -23,7 +23,7 @@
 | `test/test_pico_connection.py` | `main` | Pico 连接与数据读取快速联调脚本 | 输出手柄、按键、体感数据 |
 | `test/test_trigger.py` | 顶层循环脚本 | 快速验证右手 trigger/grip 变化 | 最小化输入链路验证 |
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
-| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_xyz` / `read_arm_pose` | 使用 Pico 右手柄按住 grip 后的相对 xyz 位移直连控制 RM75-B 末端 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd` |
+| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_xyz` / `read_arm_pose` | 使用 Pico 右手柄按住 grip 后的相对 xyz 位移直连控制 RM75-B 末端 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
 
 ## 3. 变更与 Bug 追踪日志 (Changelog)
 ### [2026-04-24]
@@ -81,3 +81,14 @@
   - 使用 `right_grip` 作为控制激活键：按下时记录右手柄原点与当前机械臂末端位姿，按住期间用相对位移更新目标 xyz，松开时清空原点并调用 `rm_set_arm_slow_stop()`。
   - 使用 RealMan `rm_movep_canfd()` 发送末端位姿透传，默认低跟随；保留 `--high-follow` 作为显式选项。
   - 新增 RealMan Python 包来源输出，便于区分 pip 安装和本地源码导入。
+
+### [2026-04-24]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户在 `ts_pico_teleop` conda 环境中直接运行 `python test/realman_contrl_lxqs.py`，顶层导入 `rclpy` 时报错 `ModuleNotFoundError: No module named 'rclpy._rclpy_pybind11'`。
+  - 报错栈显示当前 Python 为 3.13，而 ROS Humble 的 `rclpy` 路径来自 `/opt/ros/humble/.../python3.10`，二进制扩展 ABI 不匹配。
+- **具体修改内容**:
+  - 移除 `test/realman_contrl_lxqs.py` 顶层 `rclpy` / `std_msgs` 导入。
+  - 将 `RealmanXrIncrementalTeleop` 从 ROS2 `Node` 改为普通 Python 控制类，默认使用 `time.sleep()` 定频循环。
+  - 新增 `--enable-ros-publish` 参数，仅在显式启用时按需导入 `rclpy` 并发布 `/action`、`/state`。
+  - 增加纯 Python 日志输出，保证没有 ROS2 时仍可运行核心 RealMan 末端增量控制逻辑。
