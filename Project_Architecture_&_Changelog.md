@@ -23,7 +23,7 @@
 | `test/test_pico_connection.py` | `main` | Pico 连接与数据读取快速联调脚本 | 输出手柄、按键、体感数据 |
 | `test/test_trigger.py` | 顶层循环脚本 | 快速验证右手 trigger/grip 变化 | 最小化输入链路验证 |
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
-| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
+| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `world_delta_to_controller_local` / `read_arm_pose` | 使用 Pico 右手柄按住 grip 后的手柄局部 xyz + 相对 rpy 位姿直连控制 RM75-B 末端 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
 
 ## 3. 变更与 Bug 追踪日志 (Changelog)
 ### [2026-04-24]
@@ -126,3 +126,15 @@
   - 新增 `DEFAULT_RPY_AXIS_SIGN = (1.0, 1.0, 1.0)` 和命令行参数 `--rpy-axis-sign`，用于后续单独反转某个旋转通道方向。
   - 新增 `--rpy-axis-map` 参数，允许实机继续调整 rpy 到机械臂 rx/ry/rz 的映射关系。
   - 在 `send_target_pose()` 中先按 `rpy_axis_map` 重排 `raw_delta_rpy`，再按 `rpy_axis_sign` 和 `rpy_scale_factor` 生成透传姿态增量。
+
+### [2026-04-26]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户实机反馈 `test/realman_contrl_lxqs.py` 的轴向旋转顺/逆方向反了。
+  - 用户反馈平移仍按固定控制坐标系解释：手柄旋转后，沿原世界前方移动仍驱动机械臂向前；期望平移按当前手柄局部方向解释，即沿手柄前方推动时机械臂向前。
+  - 代码排查发现 `send_target_pose()` 直接使用 `controller_xyz - controller_origin_xyz` 作为 `delta_xyz`，没有使用手柄旋转矩阵把位移投影到手柄局部坐标系。
+- **具体修改内容**:
+  - 调整 `read_controller_pose()` 返回值，除 `xyz+rpy` 外同步返回转换后的右手柄旋转矩阵。
+  - 新增 `world_delta_to_controller_local()`，通过 `controller_rotation.T @ world_delta_xyz` 将控制坐标系位移转换为当前手柄局部位移。
+  - 修改 `send_target_pose()`，先计算世界位移差，再转为手柄局部位移后参与 `xyz_scale_factor`、`max_delta_m` 和 `rm_movep_canfd()` 目标位姿生成。
+  - 将默认 `DEFAULT_RPY_AXIS_SIGN` 从 `(1.0, 1.0, 1.0)` 调整为 `(1.0, -1.0, 1.0)`，默认反转轴向旋转通道；仍可通过 `--rpy-axis-sign` 覆盖。

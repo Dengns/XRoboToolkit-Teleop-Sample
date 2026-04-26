@@ -28,7 +28,7 @@ DEFAULT_CONTROL_RATE_HZ = 50
 DEFAULT_XYZ_SCALE_FACTOR = 1.0
 DEFAULT_RPY_SCALE_FACTOR = 1.0
 DEFAULT_RPY_AXIS_MAP = (1, 0, 2)
-DEFAULT_RPY_AXIS_SIGN = (1.0, 1.0, 1.0)
+DEFAULT_RPY_AXIS_SIGN = (1.0, -1.0, 1.0)
 DEFAULT_GRIP_THRESHOLD = 0.9
 DEFAULT_MAX_DELTA_M = 0.25
 
@@ -137,8 +137,8 @@ def rotation_matrix_to_rpy(rotation_matrix: np.ndarray) -> np.ndarray:
     return np.asarray([roll, pitch, yaw], dtype=float)
 
 
-def read_controller_pose(xr_client: XrClient) -> tuple[np.ndarray, np.ndarray]:
-    """读取右手柄 SDK pose，并转换到项目现有控制坐标系的 xyz+rpy。"""
+def read_controller_pose(xr_client: XrClient) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """读取右手柄 SDK pose，并转换到项目现有控制坐标系的 xyz、rpy 和旋转矩阵。"""
     pose = np.asarray(xr_client.get_pose_by_name("right_controller"), dtype=float)
     if pose.shape[0] < 7 or not np.all(np.isfinite(pose[:7])):
         raise RuntimeError(f"右手柄位姿无效: {pose}")
@@ -147,12 +147,12 @@ def read_controller_pose(xr_client: XrClient) -> tuple[np.ndarray, np.ndarray]:
     controller_rotation = quaternion_xyzw_to_rotation_matrix(pose[3:7])
     controller_rotation = R_HEADSET_TO_WORLD @ controller_rotation @ R_HEADSET_TO_WORLD.T
     controller_rpy = rotation_matrix_to_rpy(controller_rotation)
-    return controller_xyz, controller_rpy
+    return controller_xyz, controller_rpy, controller_rotation
 
 
 def read_controller_xyz(xr_client: XrClient) -> np.ndarray:
     """兼容旧调用：只读取右手柄 xyz。"""
-    controller_xyz, _ = read_controller_pose(xr_client)
+    controller_xyz, _, _ = read_controller_pose(xr_client)
     return controller_xyz
 
 
@@ -161,6 +161,11 @@ def clip_delta(delta_xyz: np.ndarray, max_delta_m: float) -> np.ndarray:
     if max_delta_m <= 0:
         return delta_xyz
     return np.clip(delta_xyz, -max_delta_m, max_delta_m)
+
+
+def world_delta_to_controller_local(delta_xyz: np.ndarray, controller_rotation: np.ndarray) -> np.ndarray:
+    """把控制坐标系位移投影到当前手柄局部坐标系。"""
+    return controller_rotation.T @ delta_xyz
 
 
 class RealmanXrIncrementalTeleop:
@@ -264,13 +269,20 @@ class RealmanXrIncrementalTeleop:
         self.was_active = False
         self.log_info("右手 grip 已松开，停止发送位姿透传并清空追踪原点。")
 
-    def send_target_pose(self, controller_xyz: np.ndarray, controller_rpy: np.ndarray):
+    def send_target_pose(
+        self,
+        controller_xyz: np.ndarray,
+        controller_rpy: np.ndarray,
+        controller_rotation: np.ndarray,
+    ):
         assert self.arm is not None
         assert self.controller_origin_xyz is not None
         assert self.controller_origin_rpy is not None
         assert self.arm_origin_pose is not None
 
-        delta_xyz = (controller_xyz - self.controller_origin_xyz) * self.config.xyz_scale_factor
+        world_delta_xyz = controller_xyz - self.controller_origin_xyz
+        delta_xyz = world_delta_to_controller_local(world_delta_xyz, controller_rotation)
+        delta_xyz = delta_xyz * self.config.xyz_scale_factor
         delta_xyz = clip_delta(delta_xyz, self.config.max_delta_m)
         raw_delta_rpy = wrap_angle(controller_rpy - self.controller_origin_rpy)
         delta_rpy = raw_delta_rpy[list(self.config.rpy_axis_map)]
@@ -321,11 +333,11 @@ class RealmanXrIncrementalTeleop:
                 self.publish_state()
                 return
 
-            controller_xyz, controller_rpy = read_controller_pose(self.xr_client)
+            controller_xyz, controller_rpy, controller_rotation = read_controller_pose(self.xr_client)
 
             if not self.was_active:
                 self.activate_control(controller_xyz, controller_rpy)
-            self.send_target_pose(controller_xyz, controller_rpy)
+            self.send_target_pose(controller_xyz, controller_rpy, controller_rotation)
 
             self.publish_state()
         except Exception as exc:
@@ -381,7 +393,7 @@ def parse_args(argv: list[str] | None = None) -> TeleopConfig:
     parser.add_argument("--xyz-scale", type=float, default=DEFAULT_XYZ_SCALE_FACTOR, help="手柄 xyz 位移到机械臂 xyz 位移的比例")
     parser.add_argument("--rpy-scale", type=float, default=DEFAULT_RPY_SCALE_FACTOR, help="手柄 rpy 转动到机械臂 rpy 转动的比例")
     parser.add_argument("--rpy-axis-map", type=parse_rpy_axis_map, default=DEFAULT_RPY_AXIS_MAP, help="rpy 通道映射，默认 1,0,2 表示交换 roll/pitch 并保持 yaw")
-    parser.add_argument("--rpy-axis-sign", type=parse_rpy_axis_sign, default=DEFAULT_RPY_AXIS_SIGN, help="rpy 通道方向，默认 1,1,1；如某轴方向反了可设为 -1")
+    parser.add_argument("--rpy-axis-sign", type=parse_rpy_axis_sign, default=DEFAULT_RPY_AXIS_SIGN, help="rpy 通道方向，默认 1,-1,1；如某轴方向反了可设为 -1")
     parser.add_argument("--scale", type=float, default=None, help="兼容旧参数：等同于 --xyz-scale")
     parser.add_argument("--grip-threshold", type=float, default=DEFAULT_GRIP_THRESHOLD, help="右手 grip 激活阈值")
     parser.add_argument("--max-delta", type=float, default=DEFAULT_MAX_DELTA_M, help="单次按住允许的最大 xyz 相对位移，单位 m；<=0 表示不限制")
