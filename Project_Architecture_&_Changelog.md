@@ -220,3 +220,12 @@
   - 新增 `log_a_stop_event_comparison()`，A 键停止时打印 tracker xyz、机械臂 xyz、期望机械臂 xyz 偏移、实际机械臂 xyz 偏移和误差。
   - 调整 `deactivate_control()`，停止遥操时先尽力读取绑定 tracker 和机械臂当前位姿用于事件对比；读取失败只报警，不阻塞缓停和清空控制原点。
   - B 键复位时同步清空未完成的 A 键事件记录，避免复位后误用上一轮启动事件。
+
+### [2026-04-29]
+- **更新类型**: Refactor / Test
+- **修改目的/Bug现象**:
+  - 用户反馈 `test/realman_contrl_motion_tracker.py` 中 A 键事件 xyz 偏移对比日志以一长串 list 输出，不便于现场直观比较 x/y/z 三个方向的误差。
+- **具体修改内容**:
+  - 将 `log_a_stop_event_comparison()` 的 xyz 偏移对比日志改为多行表格。
+  - 日志新增计算公式说明、启动/停止 tracker id、当前/启动时 scale 和 `max_delta_m`。
+  - 每个轴单独展示 tracker 位移、期望机械臂位移、实际机械臂位移和误差；不改变原有控制和误差计算逻辑。

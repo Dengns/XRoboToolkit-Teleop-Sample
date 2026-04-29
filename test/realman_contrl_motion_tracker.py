@@ -471,20 +471,29 @@ class RealmanMotionTrackerTeleop:
         actual_arm_delta_xyz = stop_arm_pose[:3] - start_arm_pose[:3]
         xyz_error = actual_arm_delta_xyz - expected_arm_delta_xyz
 
-        tracker_id_note = ""
+        tracker_id_note = "无"
         if stop_tracker_id is not None and stop_tracker_id != start_tracker_id:
-            tracker_id_note = f", tracker_id_changed={start_tracker_id}->{stop_tracker_id}"
+            tracker_id_note = f"{start_tracker_id}->{stop_tracker_id}"
+
+        comparison_rows = "\n".join(
+            (
+                f"  {axis:<4}"
+                f"{float(tracker_delta_xyz[index]):>18.6f}"
+                f"{float(expected_arm_delta_xyz[index]):>24.6f}"
+                f"{float(actual_arm_delta_xyz[index]):>22.6f}"
+                f"{float(xyz_error[index]):>16.6f}"
+            )
+            for index, axis in enumerate(("x", "y", "z"))
+        )
 
         self.log_info(
-            "A 键事件 xyz 偏移对比: "
-            f"tracker_delta_xyz={tracker_delta_xyz.tolist()}, "
-            f"expected_arm_delta_xyz={expected_arm_delta_xyz.tolist()}, "
-            f"actual_arm_delta_xyz={actual_arm_delta_xyz.tolist()}, "
-            f"xyz_error={xyz_error.tolist()}, "
-            f"xyz_scale={comparison_scale:g}, "
-            f"start_xyz_scale={start_scale:g}, "
-            f"max_delta_m={self.config.max_delta_m}"
-            f"{tracker_id_note}"
+            "A 键事件 xyz 偏移对比:\n"
+            f"  tracker_id: start={start_tracker_id}, stop={stop_tracker_id}, changed={tracker_id_note}\n"
+            f"  计算公式: expected_arm_delta = clip(tracker_delta * xyz_scale, +/-max_delta_m)\n"
+            f"  xyz_scale: current={comparison_scale:g}, start={start_scale:g}, "
+            f"max_delta_m={self.config.max_delta_m}\n"
+            "  轴       tracker位移(m)      期望机械臂位移(m)     实际机械臂位移(m)        误差(m)\n"
+            f"{comparison_rows}"
         )
 
     def activate_control(self, tracker_id: str, tracker_xyz: np.ndarray, tracker_rpy: np.ndarray):
