@@ -24,7 +24,7 @@
 | `test/test_trigger.py` | 顶层循环脚本 | 快速验证右手 trigger/grip 变化 | 最小化输入链路验证 |
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
 | `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` / `record_grip_press_event` / `log_grip_release_comparison` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端，并在 grip 按下/松开时记录手柄与机械臂位姿做 scale 感知偏移对比 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
-| `test/realman_contrl_motion_tracker.py` | `RealmanMotionTrackerTeleop` / `read_motion_tracker_pose` / `iter_motion_tracker_pose_values` / `parse_pose_7d` | 使用 Pico Motion Tracker 的相对 xyz+rpy 位姿直连控制 RM75-B 末端，A 键切换启停，B 键复位，右摇杆调 scale，支持固定复位末端位姿 | 不按 SN 过滤，兼容 `pose` 和原始 `joints[*].p`；依赖 RealMan `rm_movep_canfd` |
+| `test/realman_contrl_motion_tracker.py` | `RealmanMotionTrackerTeleop` / `read_motion_tracker_pose` / `iter_motion_tracker_pose_values` / `parse_pose_7d` / `record_a_start_event` / `log_a_stop_event_comparison` | 使用 Pico Motion Tracker 的相对 xyz+rpy 位姿直连控制 RM75-B 末端，A 键切换启停并记录启停事件 xyz 偏移对比，B 键复位，右摇杆调 scale，支持固定复位末端位姿 | 不按 SN 过滤，兼容 `pose` 和原始 `joints[*].p`；依赖 RealMan `rm_movep_canfd` |
 | `test/realman_coordinate_system.py` | `run_coordinate_test` / `stream_pose` / `build_axis_target` | 通过固定原点和 xyz 正负 10cm 往返移动验证 RM75 Base 坐标系方向 | 依赖 `RM75BInterface`、RealMan `rm_movep_canfd` |
 
 ## 3. 变更与 Bug 追踪日志 (Changelog)
@@ -209,3 +209,14 @@
   - 新增 `grip_press_event` 缓存，`activate_control()` 在读取机械臂当前末端位姿后调用 `record_grip_press_event()` 记录按下事件。
   - 新增 `log_grip_release_comparison()`，在松开 grip 时打印手柄 `xyz/rpy` 原始偏移、考虑 scale 和映射后的期望机械臂 `xyz/rpy` 偏移、机械臂实际偏移以及误差。
   - 调整 `deactivate_control()`，松开时先尽力读取当前手柄和机械臂位姿用于事件记录；读取失败只报警，不阻塞缓停和清空控制原点。
+
+### [2026-04-29]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户需要在 `test/realman_contrl_motion_tracker.py` 中记录 A 键启动和再次按下停止两个事件点的输入源/机械臂位置。
+  - 需要打印 Motion Tracker 的 xyz 偏移经过当前 `xyz_scale_factor` 和 `max_delta_m` 后对应的期望机械臂 xyz 偏移，并与机械臂实际 xyz 偏移比较；旋转角不参与比较。
+- **具体修改内容**:
+  - 新增 `a_start_event` 缓存，`activate_control()` 在读取机械臂当前末端位姿后调用 `record_a_start_event()` 记录 A 键启动事件。
+  - 新增 `log_a_stop_event_comparison()`，A 键停止时打印 tracker xyz、机械臂 xyz、期望机械臂 xyz 偏移、实际机械臂 xyz 偏移和误差。
+  - 调整 `deactivate_control()`，停止遥操时先尽力读取绑定 tracker 和机械臂当前位姿用于事件对比；读取失败只报警，不阻塞缓停和清空控制原点。
+  - B 键复位时同步清空未完成的 A 键事件记录，避免复位后误用上一轮启动事件。

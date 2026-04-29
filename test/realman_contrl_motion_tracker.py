@@ -288,6 +288,7 @@ class RealmanMotionTrackerTeleop:
         self.last_scale_direction = 0
         self.active_tracker_id: str | None = None
         self.xyz_scale_factor = self.config.xyz_scale_factor
+        self.a_start_event: dict[str, Any] | None = None
         self.last_warn_time = 0.0
 
         if self.config.enable_ros_publish:
@@ -383,6 +384,7 @@ class RealmanMotionTrackerTeleop:
         self.tracker_origin_rpy = None
         self.arm_origin_pose = None
         self.active_tracker_id = None
+        self.a_start_event = None
         self.was_active = False
         self.target_pose = None
         ret = self.arm.arm.rm_set_arm_slow_stop()
@@ -415,6 +417,76 @@ class RealmanMotionTrackerTeleop:
         self.publish_state()
         return True
 
+    def record_a_start_event(
+        self,
+        tracker_id: str,
+        tracker_xyz: np.ndarray,
+        arm_pose: np.ndarray,
+    ):
+        """记录 A 键启动遥操瞬间的 tracker 和机械臂 xyz。"""
+        self.a_start_event = {
+            "tracker_id": tracker_id,
+            "tracker_xyz": tracker_xyz.copy(),
+            "arm_pose": arm_pose.copy(),
+            "xyz_scale_factor": self.xyz_scale_factor,
+        }
+        self.log_info(
+            "A 键启动事件记录: "
+            f"tracker_id={tracker_id}, "
+            f"tracker_xyz={tracker_xyz.tolist()}, "
+            f"arm_xyz={arm_pose[:3].tolist()}, "
+            f"xyz_scale={self.xyz_scale_factor:g}"
+        )
+
+    def log_a_stop_event_comparison(
+        self,
+        stop_tracker_id: str | None,
+        stop_tracker_xyz: np.ndarray | None,
+        stop_arm_pose: np.ndarray | None,
+    ):
+        """记录 A 键停止瞬间数据，并比较 tracker xyz 与机械臂 xyz 偏移。"""
+        self.log_info(
+            "A 键停止事件记录: "
+            f"tracker_id={stop_tracker_id}, "
+            f"tracker_xyz={None if stop_tracker_xyz is None else stop_tracker_xyz.tolist()}, "
+            f"arm_xyz={None if stop_arm_pose is None else stop_arm_pose[:3].tolist()}"
+        )
+
+        if self.a_start_event is None:
+            self.log_warning("无法对比 A 键事件偏移：缺少启动事件记录。")
+            return
+        if stop_tracker_xyz is None or stop_arm_pose is None:
+            self.log_warning("无法对比 A 键事件偏移：停止事件的 tracker 或机械臂位姿读取失败。")
+            return
+
+        start_tracker_id = str(self.a_start_event["tracker_id"])
+        start_tracker_xyz = self.a_start_event["tracker_xyz"]
+        start_arm_pose = self.a_start_event["arm_pose"]
+        start_scale = float(self.a_start_event["xyz_scale_factor"])
+        comparison_scale = self.xyz_scale_factor
+
+        tracker_delta_xyz = stop_tracker_xyz - start_tracker_xyz
+        expected_arm_delta_xyz = tracker_delta_xyz * comparison_scale
+        expected_arm_delta_xyz = clip_delta(expected_arm_delta_xyz, self.config.max_delta_m)
+        actual_arm_delta_xyz = stop_arm_pose[:3] - start_arm_pose[:3]
+        xyz_error = actual_arm_delta_xyz - expected_arm_delta_xyz
+
+        tracker_id_note = ""
+        if stop_tracker_id is not None and stop_tracker_id != start_tracker_id:
+            tracker_id_note = f", tracker_id_changed={start_tracker_id}->{stop_tracker_id}"
+
+        self.log_info(
+            "A 键事件 xyz 偏移对比: "
+            f"tracker_delta_xyz={tracker_delta_xyz.tolist()}, "
+            f"expected_arm_delta_xyz={expected_arm_delta_xyz.tolist()}, "
+            f"actual_arm_delta_xyz={actual_arm_delta_xyz.tolist()}, "
+            f"xyz_error={xyz_error.tolist()}, "
+            f"xyz_scale={comparison_scale:g}, "
+            f"start_xyz_scale={start_scale:g}, "
+            f"max_delta_m={self.config.max_delta_m}"
+            f"{tracker_id_note}"
+        )
+
     def activate_control(self, tracker_id: str, tracker_xyz: np.ndarray, tracker_rpy: np.ndarray):
         assert self.arm is not None
         self.active_tracker_id = tracker_id
@@ -423,6 +495,7 @@ class RealmanMotionTrackerTeleop:
         self.arm_origin_pose = read_arm_pose(self.arm)
         self.target_pose = self.arm_origin_pose.copy()
         self.was_active = True
+        self.record_a_start_event(tracker_id, tracker_xyz, self.arm_origin_pose)
         self.log_info(
             "Motion Tracker 遥操已激活，记录控制原点: "
             f"tracker_id={self.active_tracker_id}, "
@@ -433,6 +506,26 @@ class RealmanMotionTrackerTeleop:
 
     def deactivate_control(self):
         assert self.arm is not None
+        stop_tracker_id = None
+        stop_tracker_xyz = None
+        stop_arm_pose = None
+
+        if self.xr_client is not None:
+            try:
+                stop_tracker_id, stop_tracker_xyz, _ = read_motion_tracker_pose(
+                    self.xr_client,
+                    self.active_tracker_id,
+                )
+            except RuntimeError as exc:
+                self.log_warning(f"A 键停止时读取 Motion Tracker 位姿失败: {exc}")
+
+        try:
+            stop_arm_pose = read_arm_pose(self.arm)
+        except RuntimeError as exc:
+            self.log_warning(str(exc))
+
+        self.log_a_stop_event_comparison(stop_tracker_id, stop_tracker_xyz, stop_arm_pose)
+
         if self.config.slow_stop_on_release:
             ret = self.arm.arm.rm_set_arm_slow_stop()
             if ret != 0:
@@ -443,6 +536,7 @@ class RealmanMotionTrackerTeleop:
         self.arm_origin_pose = None
         self.active_tracker_id = None
         self.target_pose = None
+        self.a_start_event = None
         self.was_active = False
         self.log_info("Motion Tracker 遥操已停止，停止发送位姿透传并清空追踪原点。")
 
