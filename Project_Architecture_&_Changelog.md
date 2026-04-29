@@ -23,7 +23,9 @@
 | `test/test_pico_connection.py` | `main` | Pico 连接与数据读取快速联调脚本 | 输出手柄、按键、体感数据 |
 | `test/test_trigger.py` | 顶层循环脚本 | 快速验证右手 trigger/grip 变化 | 最小化输入链路验证 |
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
-| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
+| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` / `record_grip_press_event` / `log_grip_release_comparison` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端，并在 grip 按下/松开时记录手柄与机械臂位姿做 scale 感知偏移对比 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
+| `test/realman_contrl_motion_tracker.py` | `RealmanMotionTrackerTeleop` / `read_motion_tracker_pose` / `iter_motion_tracker_pose_values` / `parse_pose_7d` | 使用 Pico Motion Tracker 的相对 xyz+rpy 位姿直连控制 RM75-B 末端，A 键切换启停，B 键复位，右摇杆调 scale，支持固定复位末端位姿 | 不按 SN 过滤，兼容 `pose` 和原始 `joints[*].p`；依赖 RealMan `rm_movep_canfd` |
+| `test/realman_coordinate_system.py` | `run_coordinate_test` / `stream_pose` / `build_axis_target` | 通过固定原点和 xyz 正负 10cm 往返移动验证 RM75 Base 坐标系方向 | 依赖 `RM75BInterface`、RealMan `rm_movep_canfd` |
 
 ## 3. 变更与 Bug 追踪日志 (Changelog)
 ### [2026-04-24]
@@ -126,3 +128,84 @@
   - 新增 `DEFAULT_RPY_AXIS_SIGN = (1.0, 1.0, 1.0)` 和命令行参数 `--rpy-axis-sign`，用于后续单独反转某个旋转通道方向。
   - 新增 `--rpy-axis-map` 参数，允许实机继续调整 rpy 到机械臂 rx/ry/rz 的映射关系。
   - 在 `send_target_pose()` 中先按 `rpy_axis_map` 重排 `raw_delta_rpy`，再按 `rpy_axis_sign` 和 `rpy_scale_factor` 生成透传姿态增量。
+
+### [2026-04-29]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 需要将 `test/realman_contrl_motion_tracker.py` 从右手柄拷贝脚本改为 Pico Motion Tracker 遥操入口。
+  - 用户要求用手柄 A 键作为 tracker 遥操的触发和停止条件：第一次按下启动，再次按下停止。
+  - 用户要求不按 SN 过滤 tracker，所有 SN 均可作为输入源；原始输入可能包含 `joints[*].p` 字符串形式的 7 维 pose。
+- **具体修改内容**:
+  - 将控制类改为 `RealmanMotionTrackerTeleop`，A 键上升沿切换 `teleop_enabled`，停止时优先缓停并清空 tracker 原点。
+  - 新增 `parse_pose_7d()` 和 `iter_motion_tracker_pose_values()`，兼容 SDK 封装后的 `pose` 数组、直接 `p` 字段和原始 `joints[*].p` 字段。
+  - 新增 `read_motion_tracker_pose()`，遍历所有 SN 下的候选 tracker 位姿，不做 SN 白名单过滤；启动后绑定首次选中的 tracker id，避免多 tracker 在线时控制源跳变。
+  - 保留原机械臂末端位姿透传逻辑：按启动瞬间 tracker 位姿和机械臂末端位姿建立原点，按相对 `xyz+rpy` 增量生成 `[x,y,z,rx,ry,rz]` 后调用 `rm_movep_canfd()`。
+
+### [2026-04-29]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户要求 `test/realman_contrl_motion_tracker.py` 支持 B 键复位：按下后机械臂回到指定固定初始位置。
+  - 用户要求 tracker 的 `scale` 可运行时调整，默认值为 1，可选档位为 `0.125,0.25,0.5,1.0,2.0,4.0,8.0`，右摇杆向左减小、向右增大，并在调整时打印当前值。
+- **具体修改内容**:
+  - 新增 `SCALE_OPTIONS`、`parse_scale_option()` 和运行时 `xyz_scale_factor`，将 `DEFAULT_XYZ_SCALE_FACTOR` 改为 `1.0`。
+  - 新增 `update_scale_from_joystick()`，读取右手柄摇杆 x 轴，按离散档位调整 tracker xyz scale，并输出日志。
+  - 新增 `DEFAULT_RESET_JOINTS_DEG = (0,-30,0,60,0,30,0)`，作为 RM75-6F 推荐待机复位关节角；新增 `--reset-joints-deg` 支持现场覆盖。
+  - 新增 `handle_reset_button()` 和 `reset_arm_to_initial_pose()`，B 键上升沿停止 tracker 遥操、清空原点，并通过 `RM75BInterface.go_home()` / RealMan `rm_movej` 阻塞移动到复位关节角。
+
+### [2026-04-29]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户实机运行 `test/realman_contrl_motion_tracker.py` 时高频出现 RealMan SDK 报错：`[rm_get_current_arm_state] get_current_arm_state send error` / `send err: -2`。
+  - 代码排查发现 `publish_state()` 在启用 ROS 发布时会在控制循环内调用 `read_arm_pose()`，从而高频触发 `rm_get_current_arm_state()`，可能与 `rm_movep_canfd()` 透传抢占同一 RealMan 通信链路。
+- **具体修改内容**:
+  - 将 `RealmanMotionTrackerTeleop.publish_state()` 改为 no-op，保留函数和调用点但不再读取机械臂状态、不再发布 `/action` / `/state`。
+  - 该调整避免遥操循环内周期性调用 `rm_get_current_arm_state()`，降低 RealMan TCP/JSON 发送冲突风险。
+
+### [2026-04-29]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户按 B 键复位时仍出现 RealMan SDK 发送错误：复位前后分别触发 `rm_get_current_arm_state` 和 `rm_movej` 的 `send err: -2`。
+  - 代码排查发现 `reset_arm_to_initial_pose()` 在 `go_home()` 后立即调用 `read_arm_pose()`，仍会触发 `rm_get_current_arm_state()`；同时复位前没有明确停止上一轮 `rm_movep_canfd()` 透传。
+- **具体修改内容**:
+  - 修改 B 键复位流程：先清空 tracker 控制状态，再强制调用 `rm_set_arm_slow_stop()`，等待 0.2 秒后再调用 `go_home()` / `rm_movej`。
+  - 移除 B 键复位完成后的 `read_arm_pose()`，避免复位路径再次触发 `rm_get_current_arm_state()`。
+  - 移除停止 tracker 遥操 `deactivate_control()` 中的 `read_arm_pose()`，停止时仅缓停并清空控制原点。
+
+### [2026-04-29]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户希望 `test/realman_contrl_motion_tracker.py` 使用固定机械臂初始末端位姿 `arm_pose=[0.43261, 0.028079, 0.026739, 2.479, 1.491, 2.482]`，避免 A 键反复启停时每次从 `rm_get_current_arm_state()` 读取到不同的 `arm_pose` 作为控制原点。
+  - 代码排查发现 `activate_control()` 每次 A 键启动都会调用 `read_arm_pose()`，导致机械臂控制原点绑定到实机当前末端位姿。
+- **具体修改内容**:
+  - 新增 `DEFAULT_INITIAL_ARM_POSE = (0.43261, 0.028079, 0.026739, 2.479, 1.491, 2.482)`。
+  - 新增 `--initial-arm-pose` 参数和 `parse_initial_arm_pose()`，支持按 `x,y,z,rx,ry,rz` 覆盖固定初始末端位姿。
+  - 修改 `init_hardware()` 和 `activate_control()`，不再读取当前机械臂状态作为 `target_pose` / `arm_origin_pose`，而是统一使用固定初始末端位姿。
+
+### [2026-04-29]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户澄清上一条需求表达不准确：A 键启动时的初始化位置仍应使用 `read_arm_pose()` 读取当前机械臂末端位姿；给出的 `arm_pose=[0.43261, 0.028079, 0.026739, 2.479, 1.491, 2.482]` 应作为 B 键复位目标位姿。
+- **具体修改内容**:
+  - 移除固定初始末端位姿逻辑，`init_hardware()` 和 `activate_control()` 恢复使用 `read_arm_pose()` 获取当前机械臂末端位姿。
+  - 将固定 pose 改为 `DEFAULT_RESET_ARM_POSE = (0.43261, 0.028079, 0.026739, 2.479, 1.491, 2.482)`。
+  - 将 B 键复位从 7 维关节角 `go_home()` 改为 6 维末端位姿 `rm_movep_canfd()` 短时透传；新增 `--reset-arm-pose` 参数支持覆盖。
+
+### [2026-04-29]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户需要一个独立脚本验证 RM75-B/RM75-6F 机械臂 Base 坐标系中 x/y/z 正负方向的实际运动方向。
+- **具体修改内容**:
+  - 新增 `test/realman_coordinate_system.py`。
+  - 默认测试原点设置为 `[0.1166, 0.0, 0.7247, 0.0, 1.043, 0.0]`，支持 `--origin-pose` 覆盖。
+  - 测试流程按顺序执行：回原点、X+10cm、回原点、X-10cm、回原点、Y+10cm、回原点、Y-10cm、回原点、Z+10cm、回原点、Z-10cm、回原点。
+  - 通过 `rm_movep_canfd()` 低跟随重复发送每个目标位姿，支持 `--step`、`--rate`、`--duration`、`--settle` 参数调节。
+
+### [2026-04-29]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户需要在 `test/realman_contrl_lxqs.py` 中记录右手 grip 按下和松开两个事件点的手柄/机械臂位姿。
+  - 需要打印手柄位移经过 `xyz_scale_factor`、`max_delta_m`、`rpy_axis_map`、`rpy_axis_sign`、`rpy_scale_factor` 后对应的期望机械臂偏移，并与机械臂实际偏移比较。
+- **具体修改内容**:
+  - 新增 `grip_press_event` 缓存，`activate_control()` 在读取机械臂当前末端位姿后调用 `record_grip_press_event()` 记录按下事件。
+  - 新增 `log_grip_release_comparison()`，在松开 grip 时打印手柄 `xyz/rpy` 原始偏移、考虑 scale 和映射后的期望机械臂 `xyz/rpy` 偏移、机械臂实际偏移以及误差。
+  - 调整 `deactivate_control()`，松开时先尽力读取当前手柄和机械臂位姿用于事件记录；读取失败只报警，不阻塞缓停和清空控制原点。
