@@ -465,6 +465,8 @@ class RealmanSteamVrTrackerTeleop:
         self.arm_origin_pose: np.ndarray | None = None
         self.target_pose: np.ndarray | None = None
         self.was_active = False
+        self.waiting_for_tracker_pose = False
+        self.last_tracker_pose_error: str | None = None
         self.last_warn_time = 0.0
 
         self.init_hardware()
@@ -563,6 +565,8 @@ class RealmanSteamVrTrackerTeleop:
             self.log_warning(str(exc))
 
         self.clear_control_state()
+        self.waiting_for_tracker_pose = False
+        self.last_tracker_pose_error = None
         self.log_info("按键已松开，停止发送位姿透传并清空 tracker 原点。")
 
     def fail_safe_stop(self, reason: str):
@@ -573,6 +577,55 @@ class RealmanSteamVrTrackerTeleop:
             if ret != 0:
                 self.log_warning(f"异常缓停指令返回异常: ret={ret}")
         self.clear_control_state()
+
+    @staticmethod
+    def is_tracker_pose_runtime_error(exc: Exception) -> bool:
+        """判断是否为 tracker 暂时无有效 pose 的可恢复异常。"""
+        message = str(exc)
+        return (
+            "tracker 当前 pose 无效" in message
+            or "tracker 已断开连接" in message
+            or "当前没有有效 pose" in message
+        )
+
+    def pause_for_tracker_pose_loss(self, reason: str):
+        """tracker 丢追踪时只缓停一次，并进入等待恢复状态。"""
+        assert self.arm is not None
+        first_pause = not self.waiting_for_tracker_pose
+
+        if first_pause and self.was_active and self.config.slow_stop_on_release:
+            ret = self.arm.arm.rm_set_arm_slow_stop()
+            if ret != 0:
+                self.log_warning(f"tracker 丢追踪后的缓停指令返回异常: ret={ret}")
+
+        if first_pause:
+            self.clear_control_state()
+
+        self.waiting_for_tracker_pose = True
+        self.last_tracker_pose_error = reason
+
+        now = time.time()
+        if first_pause or now - self.last_warn_time > 1.0:
+            self.log_warning(
+                f"{reason}；当前暂停发送控制，等待 tracker 恢复有效 pose。"
+                "恢复后若仍按住激活键，将以恢复瞬间重新建立控制原点。"
+            )
+            self.last_warn_time = now
+
+    def on_tracker_pose_recovered(self, tracker_sample: TrackerPoseSample):
+        """tracker 从无效恢复后打印一次恢复日志。"""
+        if not self.waiting_for_tracker_pose:
+            return
+
+        self.waiting_for_tracker_pose = False
+        previous_error = self.last_tracker_pose_error
+        self.last_tracker_pose_error = None
+        self.log_info(
+            "tracker 已恢复有效 pose，允许重新激活控制: "
+            f"serial={tracker_sample.serial}, "
+            f"control_xyz={tracker_sample.control_xyz.tolist()}, "
+            f"上一次异常={previous_error}"
+        )
 
     def send_target_pose(self, tracker_sample: TrackerPoseSample):
         assert self.arm is not None
@@ -606,9 +659,20 @@ class RealmanSteamVrTrackerTeleop:
         if not active:
             if self.was_active:
                 self.deactivate_control()
+            else:
+                self.waiting_for_tracker_pose = False
+                self.last_tracker_pose_error = None
             return
 
-        tracker_sample = self.read_tracker_pose()
+        try:
+            tracker_sample = self.read_tracker_pose()
+        except RuntimeError as exc:
+            if self.is_tracker_pose_runtime_error(exc):
+                self.pause_for_tracker_pose_loss(str(exc))
+                return
+            raise
+
+        self.on_tracker_pose_recovered(tracker_sample)
         if not self.was_active:
             self.activate_control(tracker_sample)
         self.send_target_pose(tracker_sample)

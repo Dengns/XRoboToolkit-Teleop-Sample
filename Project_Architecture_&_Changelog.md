@@ -243,3 +243,14 @@
     - 新增 `SteamVrTrackerReader`，从 OpenVR `TrackingUniverse` 读取 tracker 绝对位姿，支持 `--tracker-serial` 指定序列号和 `--list-trackers` 仅查看在线设备与当前位姿。
     - 基于 OpenVR 绝对位姿默认采用 `project_world` 模式，将 `x右/y上/z后` 的设备坐标通过与项目一致的 `R_HEADSET_TO_WORLD` 映射为机械臂控制世界系；同时开放 `--coordinate-mode`、`--xyz-axis-map/sign`、`--rpy-axis-map/sign` 便于现场继续微调。
     - 新增按住键激活控制逻辑：有 `DISPLAY` 时使用 `HoldKeyWindow` 捕获真实按下/松开；无 `DISPLAY` 时回退到 `TerminalHoldKeyMonitor`，在终端中按住指定键维持控制。
+
+### [2026-05-03]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户通过 SSH 终端实测 `test/realman_contrl_steamvr_tracker.py` 时，SteamVR 中 tracker `connected=True` 但 `pose_valid=False`，脚本持续打印 `tracker 当前 pose 无效` 并反复进入 fail-safe，现场日志刷屏且机械臂重复缓停。
+  - 代码排查发现 `read_tracker_pose()` 在 `pose_valid=False` 时会直接抛异常，而 `run()` 对所有异常统一调用 `fail_safe_stop()`，导致每个控制周期都重复清空状态和报警。
+- **具体修改内容**:
+  - 为 `test/realman_contrl_steamvr_tracker.py` 新增 `waiting_for_tracker_pose` 和 `last_tracker_pose_error` 状态。
+  - 新增 `is_tracker_pose_runtime_error()`，将 `pose 无效 / 已断开 / 当前没有有效 pose` 识别为可恢复的 tracker 可用性异常。
+  - 新增 `pause_for_tracker_pose_loss()`：tracker 丢追踪时仅在首次异常缓停一次并清空控制状态，随后进入“等待 tracker 恢复有效 pose”状态，不再每周期重复触发 fail-safe。
+  - 新增 `on_tracker_pose_recovered()`：tracker 恢复有效 pose 后打印恢复日志；如果用户仍按住激活键，则以恢复瞬间重新建立控制原点继续增量控制。
