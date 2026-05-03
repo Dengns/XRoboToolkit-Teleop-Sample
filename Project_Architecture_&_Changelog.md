@@ -25,6 +25,7 @@
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
 | `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` / `record_grip_press_event` / `log_grip_release_comparison` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端，并在 grip 按下/松开时记录手柄与机械臂位姿做 scale 感知偏移对比 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
 | `test/realman_contrl_motion_tracker.py` | `RealmanMotionTrackerTeleop` / `read_motion_tracker_pose` / `iter_motion_tracker_pose_values` / `parse_pose_7d` / `record_a_start_event` / `log_a_stop_event_comparison` | 使用 Pico Motion Tracker 的相对 xyz+rpy 位姿直连控制 RM75-B 末端，A 键切换启停并记录启停事件 xyz 偏移对比，B 键复位，右摇杆调 scale，支持固定复位末端位姿 | 不按 SN 过滤，兼容 `pose` 和原始 `joints[*].p`；依赖 RealMan `rm_movep_canfd` |
+| `test/realman_contrl_steamvr_tracker.py` | `RealmanSteamVrTrackerTeleop` / `SteamVrTrackerReader` / `HoldKeyWindow` / `TerminalHoldKeyMonitor` / `convert_openvr_pose` | 使用 SteamVR/OpenVR 单个 Vive Tracker 的相对 xyz+rpy 位姿增量控制 RM75-B，按住指定键时跟随、松开即缓停；支持自动选 tracker、列表查看、xyz/rpy 比例与轴映射调节 | 默认将 OpenVR 位姿通过 `R_HEADSET_TO_WORLD` 统一到项目控制坐标；无 DISPLAY 时回退到终端按键保持模式 |
 | `test/realman_coordinate_system.py` | `run_coordinate_test` / `stream_pose` / `build_axis_target` | 通过固定原点和 xyz 正负 10cm 往返移动验证 RM75 Base 坐标系方向 | 依赖 `RM75BInterface`、RealMan `rm_movep_canfd` |
 
 ## 3. 变更与 Bug 追踪日志 (Changelog)
@@ -229,3 +230,16 @@
   - 将 `log_a_stop_event_comparison()` 的 xyz 偏移对比日志改为多行表格。
   - 日志新增计算公式说明、启动/停止 tracker id、当前/启动时 scale 和 `max_delta_m`。
   - 每个轴单独展示 tracker 位移、期望机械臂位移、实际机械臂位移和误差；不改变原有控制和误差计算逻辑。
+
+### [2026-05-03]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户需要一个基于单个 SteamVR/Vive Tracker 的 RM75-B 增量控制脚本，控制逻辑要求与 `test/realman_contrl_lxqs.py` 一致：按住才控制、松开即停止，并以开始控制瞬间作为相对原点。
+  - 现有 `test/test(1).py` 仅负责 OpenVR tracker 枚举与相对位姿验证，不能直接接入 RM75-B 控制链路，也没有按住/松开激活逻辑。
+  - 当前 Python 环境缺少 `meshcat`，如果直接导入 `xrobotoolkit_teleop.utils.geometry` 会在读取坐标变换常量前先失败，需要避免把可视化依赖带入真机控制脚本。
+- **具体修改内容**:
+  - 新增 `test/realman_contrl_steamvr_tracker.py`：
+    - 复用 `RM75BInterface` + `rm_movep_canfd()` 的末端位姿增量透传框架，使用单个 SteamVR `GenericTracker` 做 `xyz+rpy` 相对原点控制。
+    - 新增 `SteamVrTrackerReader`，从 OpenVR `TrackingUniverse` 读取 tracker 绝对位姿，支持 `--tracker-serial` 指定序列号和 `--list-trackers` 仅查看在线设备与当前位姿。
+    - 基于 OpenVR 绝对位姿默认采用 `project_world` 模式，将 `x右/y上/z后` 的设备坐标通过与项目一致的 `R_HEADSET_TO_WORLD` 映射为机械臂控制世界系；同时开放 `--coordinate-mode`、`--xyz-axis-map/sign`、`--rpy-axis-map/sign` 便于现场继续微调。
+    - 新增按住键激活控制逻辑：有 `DISPLAY` 时使用 `HoldKeyWindow` 捕获真实按下/松开；无 `DISPLAY` 时回退到 `TerminalHoldKeyMonitor`，在终端中按住指定键维持控制。
