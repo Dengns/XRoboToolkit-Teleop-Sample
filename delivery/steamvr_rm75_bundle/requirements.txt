@@ -1,0 +1,3 @@
+numpy==2.4.1
+openvr==2.12.1401
+Robotic_Arm==1.1.4

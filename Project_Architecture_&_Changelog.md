@@ -406,3 +406,17 @@
   - 新增 `test/realman_contrl_steamvr_tracker_usage.md`。
   - 文档明确使用 `ts_pico_teleop` conda 环境。
   - 根据脚本实际日志和参数行为，整理出最小启动命令、`Space` 按住跟随/松开停止、`Ctrl+C` 退出，以及启动成功/常见异常的最简判断方式。
+
+### [2026-05-06]
+- **更新类型**: Docs / Delivery
+- **修改目的/Bug现象**:
+  - 用户需要把 `test/realman_contrl_steamvr_tracker.py` 的最小运行链路复制到另一台服务器，希望仓库内直接提供一个可整体拷走的独立文件夹，并附带 conda 与依赖安装说明。
+  - 原仓库根目录安装脚本会额外安装 Pico SDK、R5 等非本链路必需依赖，而且没有直接把 `openvr`、`Robotic_Arm` 固化到一个面向迁移的最小交付目录里。
+- **具体修改内容**:
+  - 新增 `delivery/steamvr_rm75_bundle/` 独立迁移包目录。
+  - 将 `test/realman_contrl_steamvr_tracker.py`、`xrobotoolkit_teleop/hardware/interface/rm75b.py` 及其最小包结构复制到该目录，保证迁移包脱离主仓库其余模块后仍可导入运行。
+  - 新增迁移包内的 `README.md`、`environment.yml`、`requirements.txt`、`install_conda_env.sh`，明确：
+    - 需要复制的文件范围
+    - conda 环境创建/更新方法
+    - `openvr`、`Robotic_Arm`、`numpy` 的固定版本
+    - 新服务器上的启动命令、运行检查项与常见报错处理方式
