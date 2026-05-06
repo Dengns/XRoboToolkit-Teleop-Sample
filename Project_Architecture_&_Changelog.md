@@ -254,3 +254,13 @@
   - 新增 `is_tracker_pose_runtime_error()`，将 `pose 无效 / 已断开 / 当前没有有效 pose` 识别为可恢复的 tracker 可用性异常。
   - 新增 `pause_for_tracker_pose_loss()`：tracker 丢追踪时仅在首次异常缓停一次并清空控制状态，随后进入“等待 tracker 恢复有效 pose”状态，不再每周期重复触发 fail-safe。
   - 新增 `on_tracker_pose_recovered()`：tracker 恢复有效 pose 后打印恢复日志；如果用户仍按住激活键，则以恢复瞬间重新建立控制原点继续增量控制。
+
+### [2026-05-06]
+- **更新类型**: Docs / Test
+- **修改目的/Bug现象**:
+  - 用户需要一份面向低代码或无代码操作者的 `test/realman_contrl_steamvr_tracker.py` 超简使用文档。
+  - 文档范围只保留 conda 环境、命令行启动方式、按住/松开时的基础控制逻辑，以及最简单的运行检查项。
+- **具体修改内容**:
+  - 新增 `test/realman_contrl_steamvr_tracker_usage.md`。
+  - 文档明确使用 `ts_pico_teleop` conda 环境。
+  - 根据脚本实际日志和参数行为，整理出最小启动命令、`Space` 按住跟随/松开停止、`Ctrl+C` 退出，以及启动成功/常见异常的最简判断方式。
