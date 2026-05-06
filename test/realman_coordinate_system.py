@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from xrobotoolkit_teleop.hardware.interface.rm75b import RM75BInterface
 
-DEFAULT_ARM_IP = "192.168.5.154"
+DEFAULT_ARM_IP = "192.168.5.200"
 DEFAULT_ARM_PORT = 8080
 DEFAULT_CONTROL_RATE_HZ = 50
 DEFAULT_ORIGIN_POSE = (0.1166, 0.0, 0.7247, 0.0, 1.043, 0.0)

@@ -22,7 +22,7 @@ from xrobotoolkit_teleop.common.xr_client import XrClient
 from xrobotoolkit_teleop.hardware.interface.rm75b import RM75BInterface
 from xrobotoolkit_teleop.utils.geometry import R_HEADSET_TO_WORLD
 
-DEFAULT_ARM_IP = "192.168.5.154"
+DEFAULT_ARM_IP = "192.168.5.200"
 DEFAULT_ARM_PORT = 8080
 DEFAULT_CONTROL_RATE_HZ = 50
 DEFAULT_XYZ_SCALE_FACTOR = 1.0
@@ -269,12 +269,11 @@ class RealmanXrIncrementalTeleop:
         if self.grip_press_event is None:
             self.log_warning("无法对比 grip 偏移：缺少按下事件记录。")
             return
-        if release_controller_xyz is None or release_controller_rpy is None or release_arm_pose is None:
+        if release_controller_xyz is None or release_arm_pose is None:
             self.log_warning("无法对比 grip 偏移：松开事件的手柄或机械臂位姿读取失败。")
             return
 
         press_controller_xyz = self.grip_press_event["controller_xyz"]
-        press_controller_rpy = self.grip_press_event["controller_rpy"]
         press_arm_pose = self.grip_press_event["arm_pose"]
 
         controller_delta_xyz = release_controller_xyz - press_controller_xyz
@@ -283,29 +282,23 @@ class RealmanXrIncrementalTeleop:
         actual_arm_delta_xyz = release_arm_pose[:3] - press_arm_pose[:3]
         xyz_error = actual_arm_delta_xyz - expected_arm_delta_xyz
 
-        raw_controller_delta_rpy = wrap_angle(release_controller_rpy - press_controller_rpy)
-        expected_arm_delta_rpy = raw_controller_delta_rpy[list(self.config.rpy_axis_map)]
-        expected_arm_delta_rpy = (
-            expected_arm_delta_rpy
-            * np.asarray(self.config.rpy_axis_sign)
-            * self.config.rpy_scale_factor
+        comparison_rows = "\n".join(
+            (
+                f"  {axis:<4}"
+                f"{float(controller_delta_xyz[index]):>18.6f}"
+                f"{float(expected_arm_delta_xyz[index]):>24.6f}"
+                f"{float(actual_arm_delta_xyz[index]):>22.6f}"
+                f"{float(xyz_error[index]):>16.6f}"
+            )
+            for index, axis in enumerate(("x", "y", "z"))
         )
-        actual_arm_delta_rpy = wrap_angle(release_arm_pose[3:6] - press_arm_pose[3:6])
-        rpy_error = wrap_angle(actual_arm_delta_rpy - expected_arm_delta_rpy)
 
         self.log_info(
-            "grip 事件偏移对比: "
-            f"controller_delta_xyz={controller_delta_xyz.tolist()}, "
-            f"controller_delta_rpy={raw_controller_delta_rpy.tolist()}, "
-            f"expected_arm_delta_xyz={expected_arm_delta_xyz.tolist()}, "
-            f"expected_arm_delta_rpy={expected_arm_delta_rpy.tolist()}, "
-            f"actual_arm_delta_xyz={actual_arm_delta_xyz.tolist()}, "
-            f"actual_arm_delta_rpy={actual_arm_delta_rpy.tolist()}, "
-            f"xyz_error={xyz_error.tolist()}, "
-            f"rpy_error={rpy_error.tolist()}, "
-            f"xyz_scale={self.config.xyz_scale_factor}, "
-            f"rpy_scale={self.config.rpy_scale_factor}, "
-            f"max_delta_m={self.config.max_delta_m}"
+            "grip 事件 xyz 偏移对比:\n"
+            f"  计算公式: expected_arm_delta = clip(controller_delta * xyz_scale, +/-max_delta_m)\n"
+            f"  xyz_scale={self.config.xyz_scale_factor:g}, max_delta_m={self.config.max_delta_m}\n"
+            "  轴     controller位移(m)    期望机械臂位移(m)     实际机械臂位移(m)        误差(m)\n"
+            f"{comparison_rows}"
         )
 
     def activate_control(self, controller_xyz: np.ndarray, controller_rpy: np.ndarray):

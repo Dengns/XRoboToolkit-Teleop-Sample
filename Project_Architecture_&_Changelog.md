@@ -23,10 +23,12 @@
 | `test/test_pico_connection.py` | `main` | Pico 连接与数据读取快速联调脚本 | 输出手柄、按键、体感数据 |
 | `test/test_trigger.py` | 顶层循环脚本 | 快速验证右手 trigger/grip 变化 | 最小化输入链路验证 |
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
-| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` / `record_grip_press_event` / `log_grip_release_comparison` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端，并在 grip 按下/松开时记录手柄与机械臂位姿做 scale 感知偏移对比 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
+| `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` / `record_grip_press_event` / `log_grip_release_comparison` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端，并在 grip 按下/松开时记录手柄与机械臂位姿做 scale 感知 xyz 偏移对比 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
 | `test/realman_contrl_motion_tracker.py` | `RealmanMotionTrackerTeleop` / `read_motion_tracker_pose` / `iter_motion_tracker_pose_values` / `parse_pose_7d` / `record_a_start_event` / `log_a_stop_event_comparison` | 使用 Pico Motion Tracker 的相对 xyz+rpy 位姿直连控制 RM75-B 末端，A 键切换启停并记录启停事件 xyz 偏移对比，B 键复位，右摇杆调 scale，支持固定复位末端位姿 | 不按 SN 过滤，兼容 `pose` 和原始 `joints[*].p`；依赖 RealMan `rm_movep_canfd` |
-| `test/realman_contrl_steamvr_tracker.py` | `RealmanSteamVrTrackerTeleop` / `SteamVrTrackerReader` / `HoldKeyWindow` / `TerminalHoldKeyMonitor` / `convert_openvr_pose` | 使用 SteamVR/OpenVR 单个 Vive Tracker 的相对 xyz+rpy 位姿增量控制 RM75-B，按住指定键时跟随、松开即缓停；支持自动选 tracker、列表查看、xyz/rpy 比例与轴映射调节 | 默认将 OpenVR 位姿通过 `R_HEADSET_TO_WORLD` 统一到项目控制坐标；无 DISPLAY 时回退到终端按键保持模式 |
+| `test/realman_contrl_steamvr_tracker.py` | `RealmanSteamVrTrackerTeleop` / `SteamVrTrackerReader` / `TerminalHoldKeyMonitor` / `convert_openvr_pose` / `build_z_axis_rotation_matrix` / `log_pose_debug` | 使用 SteamVR/OpenVR 单个 Vive Tracker 的相对 xyz 与姿态增量控制 RM75-B，按住终端中的空格键时跟随、松开即缓停；支持在 OpenVR 绝对位姿映射后再追加一层水平朝向校准，并按低频打印 raw/project_world/control 三套位姿证据用于现场校轴；旋转映射支持独立配置 rotvec 通道顺序与方向 | 固定使用 OpenVR standing universe + 项目 `R_HEADSET_TO_WORLD` 坐标变换；新增 `--world-yaw-offset-deg`、`--debug-pose`、`--pose-log-interval`、`--rotvec-axis-map`、`--rotvec-axis-sign`；通过 RealMan 7 维四元数位姿透传 |
+| `test/steamvr_tracker_body_frame_probe.py` | `run_probe` / `read_tracker_pose` / `print_body_axes` / `print_reference_delta` | 只读观察 SteamVR/Vive Tracker 本体坐标系：打印 tracker 局部 +X/+Y/+Z 在 OpenVR standing universe 中的方向，并在启动瞬间锁定初始化参考系后持续输出相对 xyz/姿态增量 | 不连接机械臂；直接使用 OpenVR 原始位姿矩阵列向量识别 tracker 本体轴；用于后续把 tracker 与机械臂同向摆放后建立与基站摆放无关的初始化参考系 |
 | `test/realman_coordinate_system.py` | `run_coordinate_test` / `stream_pose` / `build_axis_target` | 通过固定原点和 xyz 正负 10cm 往返移动验证 RM75 Base 坐标系方向 | 依赖 `RM75BInterface`、RealMan `rm_movep_canfd` |
+| `scripts/simulation/teleop_pico_motion_tracker.py` | `MotionTrackerVisualizer` / `iter_motion_tracker_pose_values` / `convert_pose_to_visual_coordinate` | 从 Pico Motion Tracker 读取 pose，在 MeshCat 中按 Pico 原始坐标系可视化 tracker 位置、局部坐标轴和读取 FPS | 默认 `raw_pico` 坐标；可用 `--coordinate-mode project_world` 切换到项目 world 坐标 |
 
 ## 3. 变更与 Bug 追踪日志 (Changelog)
 ### [2026-04-24]
@@ -231,6 +233,27 @@
   - 日志新增计算公式说明、启动/停止 tracker id、当前/启动时 scale 和 `max_delta_m`。
   - 每个轴单独展示 tracker 位移、期望机械臂位移、实际机械臂位移和误差；不改变原有控制和误差计算逻辑。
 
+### [2026-04-29]
+- **更新类型**: Refactor / Test
+- **修改目的/Bug现象**:
+  - 用户要求参照 `test/realman_contrl_motion_tracker.py` 的位置 diff 打印方式，统一 `test/realman_contrl_lxqs.py` 中 grip 事件偏移对比日志。
+  - 用户明确只需要比较 x/y/z，并考虑 `xyz_scale_factor`；旋转角不参与比较。
+- **具体修改内容**:
+  - 将 `log_grip_release_comparison()` 的偏移对比日志改为多行表格，格式与 motion tracker 的 xyz diff 日志一致。
+  - 对比内容收敛为 `controller_delta_xyz`、考虑 scale 和 `max_delta_m` 后的期望机械臂 xyz、机械臂实际 xyz 以及 xyz 误差。
+  - 移除该日志中的 rpy 期望/实际/误差比较输出，不改变原有遥操姿态透传逻辑。
+
+### [2026-04-30]
+- **更新类型**: Feature / Simulation
+- **修改目的/Bug现象**:
+  - 用户需要在 `scripts/simulation/teleop_pico_motion_tracker.py` 中读取 Pico Motion Tracker 位置数据，并建立与 Pico 设备坐标系对应的可视化仿真环境。
+  - 需要在可视化界面中实时显示 tracker 位置变化，以及从 Pico Motion Tracker 读取数据的帧率。
+- **具体修改内容**:
+  - 重构 `scripts/simulation/teleop_pico_motion_tracker.py` 为 `MotionTrackerVisualizer`，复用 Motion Tracker `p/pose` 解析逻辑，支持 SDK 封装数据和原始 `joints[*].p`。
+  - 默认使用 `raw_pico` 坐标系直接显示 Pico SDK 原始 xyz/quat；保留 `--coordinate-mode project_world` 选项用于切换到项目 world 坐标。
+  - 使用 MeshCat 创建 Pico 坐标轴、网格、tracker 球体与局部坐标轴；tracker 移动时实时更新可视化位姿。
+  - 新增读取 FPS 统计，并在 MeshCat 场景中的状态文本和终端日志中显示当前读取帧率与 tracker 数量。
+
 ### [2026-05-03]
 - **更新类型**: Feature / Test
 - **修改目的/Bug现象**:
@@ -243,6 +266,7 @@
     - 新增 `SteamVrTrackerReader`，从 OpenVR `TrackingUniverse` 读取 tracker 绝对位姿，支持 `--tracker-serial` 指定序列号和 `--list-trackers` 仅查看在线设备与当前位姿。
     - 基于 OpenVR 绝对位姿默认采用 `project_world` 模式，将 `x右/y上/z后` 的设备坐标通过与项目一致的 `R_HEADSET_TO_WORLD` 映射为机械臂控制世界系；同时开放 `--coordinate-mode`、`--xyz-axis-map/sign`、`--rpy-axis-map/sign` 便于现场继续微调。
     - 新增按住键激活控制逻辑：有 `DISPLAY` 时使用 `HoldKeyWindow` 捕获真实按下/松开；无 `DISPLAY` 时回退到 `TerminalHoldKeyMonitor`，在终端中按住指定键维持控制。
+    - 保留 `--xyz-scale`、`--rpy-scale`、`--max-delta`、`--high-follow`、`--no-slow-stop` 等安全与映射参数，松开或异常时统一执行缓停并清空控制原点。
 
 ### [2026-05-03]
 - **更新类型**: Bugfix / Test
@@ -254,6 +278,124 @@
   - 新增 `is_tracker_pose_runtime_error()`，将 `pose 无效 / 已断开 / 当前没有有效 pose` 识别为可恢复的 tracker 可用性异常。
   - 新增 `pause_for_tracker_pose_loss()`：tracker 丢追踪时仅在首次异常缓停一次并清空控制状态，随后进入“等待 tracker 恢复有效 pose”状态，不再每周期重复触发 fail-safe。
   - 新增 `on_tracker_pose_recovered()`：tracker 恢复有效 pose 后打印恢复日志；如果用户仍按住激活键，则以恢复瞬间重新建立控制原点继续增量控制。
+
+### [2026-05-03]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户实测 `test/realman_contrl_steamvr_tracker.py` 已能稳定做 `xyz` 跟随，但旋转 tracker 时机械臂末端角度基本没有响应。
+  - 代码证据显示原实现 `send_target_pose()` 使用 `raw_delta_rpy = wrap_angle(current_rpy - origin_rpy)` 做欧拉角直接差分，再将 6 维欧拉角 pose 传给 `rm_movep_canfd()`；而项目通用遥操基类使用的是“相对四元数 -> angle-axis”姿态增量，RealMan SDK 文档也明确支持 7 维四元数位姿透传。
+- **具体修改内容**:
+  - 为 `test/realman_contrl_steamvr_tracker.py` 新增旋转矩阵转四元数、四元数乘法、共轭、四元数与旋转向量互转等最小姿态工具函数，避免依赖带 `meshcat` 的 `geometry.py`。
+  - `TrackerPoseSample` 新增 `control_quat_wxyz`，读取 tracker pose 时除 `control_rpy` 外同步缓存控制坐标系下的四元数姿态。
+  - `activate_control()` 启动时新增记录 `tracker_origin_quat_wxyz` 和 `arm_origin_quat_wxyz`；其中机械臂初始姿态通过 RealMan SDK `rm_algo_euler2quaternion()` 按控制器约定转换，避免手写欧拉角约定出错。
+  - `send_target_pose()` 改为：
+    - 先用 `current_tracker_quat * origin_tracker_quat_conj` 计算 tracker 相对旋转；
+    - 再转成旋转向量后继续沿用现有 `rpy_axis_map`、`rpy_axis_sign`、`rpy_scale_factor` 做通道映射与缩放；
+    - 最后转回四元数并与机械臂启动姿态复合，使用 `rm_movep_canfd()` 的 7 维四元数 pose 模式发送。
+  - 更新参数帮助文本，明确 `--rpy-scale` / `--rpy-axis-map` / `--rpy-axis-sign` 目前对“相对旋转向量”生效，保留旧参数名以兼容现场用法。
+
+### [2026-05-03]
+- **更新类型**: Refactor / Test
+- **修改目的/Bug现象**:
+  - 用户继续反馈 `test/realman_contrl_steamvr_tracker.py` 仍然“只有 xyz，没有 rpy”，当前仅凭现象无法判断是 OpenVR tracker 原始姿态没变，还是姿态命令虽然算出来了但没有真正传到机械臂。
+- **具体修改内容**:
+  - 为 `TeleopConfig` 新增 `debug_rotation`，并增加命令行参数 `--debug-rotation`。
+  - 在 `RealmanSteamVrTrackerTeleop` 中新增 `log_rotation_debug()`，按 1Hz 低频打印：
+    - `tracker_control_rpy`
+    - `tracker_control_quat_wxyz`
+    - `raw_delta_rotvec`
+    - `mapped_delta_rotvec`
+    - `target_euler`
+    - `target_quat_wxyz`
+  - 调试输出保持只读，不改变姿态控制逻辑，用于现场区分“原始 tracker 姿态链路”与“RealMan 目标姿态下发链路”的问题位置。
+
+### [2026-05-03]
+- **更新类型**: Refactor / Test
+- **修改目的/Bug现象**:
+  - 用户确认 `test/realman_contrl_steamvr_tracker.py` 已能正常驱动姿态后，希望清理排障期残留代码。
+  - 用户明确表示现场只需要控制 `xyz` 的缩放比例和映射顺序，不再需要包来源打印、设备列表检测、GUI 按键窗口、姿态调试开关和大量兼容/废弃参数。
+- **具体修改内容**:
+  - 重写 `test/realman_contrl_steamvr_tracker.py`，保留核心链路：
+    - SteamVR 单 tracker 位姿读取
+    - 相对原点的 xyz 增量控制
+    - 相对四元数姿态增量 -> RealMan 7 维四元数位姿透传
+    - tracker 丢追踪后的单次缓停与恢复重建原点
+  - 删除 `describe_robotic_arm_package()`、`TrackerInventoryItem`、`HoldKeyWindow`、`print_tracker_inventory()`、`--list-trackers`、`--debug-rotation`、`--tracker-serial`、`--tracking-universe`、`--coordinate-mode`、`--hold-source`、`--rpy-scale`、`--rpy-axis-map/sign`、`--high-follow`、`--no-slow-stop` 等排障和兼容参数。
+  - 固定脚本行为为：
+    - OpenVR `standing` universe
+    - 项目 `R_HEADSET_TO_WORLD` 坐标变换
+    - 终端 `Space` 按住控制
+    - `rm_movep_canfd(..., follow=False)` 低跟随
+    - 当前现场已验证可用的固定姿态映射顺序
+  - 对外命令行入口收敛为 `--ip`、`--port`、`--rate`、`--xyz-scale`、`--xyz-axis-map`，满足现场实际需要的最小操作面。
+
+### [2026-05-03]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户实机反馈 `test/realman_contrl_steamvr_tracker.py` 虽然已经能正常驱动，但平移映射整体错位，例如“人向南移动，机械臂却向西移动”，并且希望先确认 SteamVR tracker 当前到底是基于什么坐标系描述自己的位置和姿态，再决定如何对齐。
+  - 代码证据显示脚本一直在读取 `openvr.VRSystem().getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseStanding, ...)` 的绝对位姿，再直接通过固定 `R_HEADSET_TO_WORLD` 映射到项目控制坐标系；该链路没有给 SteamVR 房间坐标系与机械臂现场朝向之间预留单独的水平对齐层，因此只要房间朝向和机械臂朝向不一致，平移和姿态都会整体偏转一个固定角度。
+- **具体修改内容**:
+  - 扩展 `TrackerPoseSample`，同时保留 `raw_openvr`、`project_world`、`control` 三套 xyz/quat 结果，避免现场只能看最终控制结果而无法判断误差出在哪一层。
+  - 新增 `build_z_axis_rotation_matrix()`，在 `R_HEADSET_TO_WORLD` 之后增加一层仅作用于水平面的 `world_yaw_offset_deg` 朝向校准，用于补偿 SteamVR 房间朝向与机械臂工作区朝向之间的固定偏角。
+  - 更新 `convert_openvr_pose()` 和 `SteamVrTrackerReader`，使其支持把 OpenVR standing universe 的绝对位姿依次转换为：
+    - OpenVR 原始位姿
+    - 项目 `R_HEADSET_TO_WORLD` 位姿
+    - 追加世界朝向校准后的最终控制位姿
+  - 为 `RealmanSteamVrTrackerTeleop` 新增 `log_pose_debug()`，通过 `--debug-pose` 按低频打印 raw/project_world/control 三套位姿，以及平移/旋转增量映射结果，便于现场验证“往南/往西”这类固定偏转问题。
+  - 新增命令行参数 `--world-yaw-offset-deg`、`--debug-pose`、`--pose-log-interval`，其中 `--world-yaw-offset-deg` 可直接用于尝试 `90 / -90 / 180` 这类水平朝向修正。
+
+### [2026-05-03]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户进一步反馈 `test/realman_contrl_steamvr_tracker.py` 当前“平移已经对了，但旋转不对”，具体表现为“绕 z 旋转，机械臂实际绕 x”。
+  - 代码证据显示 `send_target_pose()` 把 SteamVR 相对旋转向量固定写死为 `raw_delta_rotvec[[1, 0, 2]]`，即无条件交换 x/y 两个旋转通道；当现场真实映射不是这组顺序时，就会出现某个旋转轴被错误路由到另一个轴，而且当前脚本没有任何命令行参数可调。
+- **具体修改内容**:
+  - 新增 `DEFAULT_ROTVEC_AXIS_MAP = (1, 0, 2)` 和 `DEFAULT_ROTVEC_AXIS_SIGN = (1.0, 1.0, 1.0)`，把原本写死在代码里的 SteamVR 旋转向量通道映射显式配置化。
+  - `TeleopConfig` 新增 `rotvec_axis_map`、`rotvec_axis_sign`。
+  - `send_target_pose()` 中的姿态映射从固定 `raw_delta_rotvec[[1, 0, 2]]` 改为：
+    - 先按 `rotvec_axis_map` 重排
+    - 再按 `rotvec_axis_sign` 做单轴方向翻转
+  - 新增命令行参数 `--rotvec-axis-map`、`--rotvec-axis-sign`，用于现场直接修正“绕 z 实际绕 x”或“方向反了”这类旋转错轴问题。
+  - 调试输出中同步打印 `rotvec_axis_map`、`rotvec_axis_sign`，方便现场记录每次试配的结果。
+
+### [2026-05-04]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户发现 SteamVR/OpenVR 的绝对世界坐标会随红外/基站放置方向变化，导致 `test/realman_contrl_steamvr_tracker.py` 中固定世界坐标映射在换场地或换基站朝向后可能再次错轴。
+  - 用户希望先确认 Vive Tracker 本体局部坐标系，再把后续遥操作改为：启动初始化时将 tracker 与机械臂 base 坐标系同向摆放，以该瞬间作为参考系，后续空格按住时继续做相对原点增量控制。
+- **具体修改内容**:
+  - 新增 `test/steamvr_tracker_body_frame_probe.py`，只读连接 OpenVR，不连接 RealMan 机械臂。
+  - 脚本读取 `getDeviceToAbsoluteTrackingPose(openvr.TrackingUniverseStanding, ...)` 的原始 3x4 pose，直接使用旋转矩阵三列打印 tracker 本体 `+X/+Y/+Z` 在 OpenVR 世界坐标中的方向，用于现场判断 tracker 外壳方向与本体坐标轴关系。
+  - 启动脚本瞬间锁定首个有效 tracker 的 pose 作为初始化参考系，后续持续打印 `delta_xyz_ref_m`、`relative_rpy_ref_deg`、`relative_rotvec_ref_deg`，用于验证“tracker 与机械臂同向摆放后，以初始化参考系做增量控制”的坐标稳定性。
+  - 新增 `--tracker-serial`、`--rate`、`--decimals` 参数，支持多 tracker 场景指定设备和调整终端刷新频率。
+
+### [2026-05-04]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户新增轴修正矩阵后现场测试发现，按期望目标坐标系移动时，当前 probe 打印的参考系位移实际对应关系为 `-z / -x / -y`，需要把输出修正为目标坐标系下的正确 xyz。
+- **具体修改内容**:
+  - 在 `test/steamvr_tracker_body_frame_probe.py` 中新增 `R_REFERENCE_TO_TARGET` 常量，按 `target_xyz = [-ref_z, -ref_x, -ref_y]` 修正参考系相对位移到目标坐标系。
+  - 清理 `print_reference_delta()` 中临时 `MIXTURE` 4x4 矩阵和被注释的旧计算路径，改为先计算 `delta_T = inv(reference_T) @ current_T`，再分别打印原始 `delta_xyz_ref_m` 和修正后的 `delta_xyz_target_m`。
+  - 保留 `relative_rpy_ref_deg` 与 `relative_rotvec_ref_deg` 原始参考系姿态输出，避免平移修正和姿态验证混在一起。
+
+### [2026-05-04]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户已通过 probe 确认 `[-ref_z, -ref_x, -ref_y]` 能把 tracker 初始化参考系位移修正到期望目标坐标系，并希望把该逻辑应用到 `test/realman_contrl_steamvr_tracker.py`。
+  - 原控制脚本仍使用 SteamVR/OpenVR 接收器绝对世界经 `R_HEADSET_TO_WORLD`/`world_yaw_offset` 后的 `control_xyz` 做 `current - origin`，因此基站/接收器方向变化仍可能改变机械臂平移方向。
+- **具体修改内容**:
+  - `TrackerPoseSample` 新增 `raw_transform`，保留 OpenVR 原始 4x4 位姿矩阵。
+  - `RealmanSteamVrTrackerTeleop.activate_control()` 在按下空格激活时记录 `tracker_origin_transform`，将该瞬间 tracker 本体坐标系作为本次控制参考系。
+  - `send_target_pose()` 的平移增量改为 `delta_T = inv(tracker_origin_transform) @ current_raw_transform` 后取 `delta_T[:3, 3]`，再用 `R_REFERENCE_TO_TARGET` 执行 `[-ref_z, -ref_x, -ref_y]` 方向修正，最后沿用原有 `xyz_axis_map`、`xyz_scale`、`clip_delta()` 和机械臂目标位姿发送逻辑。
+  - 姿态增量链路暂时保持原有 `control_quat_wxyz` 相对四元数逻辑，降低本次修正的影响范围。
+
+### [2026-05-04]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户现场要求在 `test/realman_contrl_steamvr_tracker.py` 的目标平移映射中将 X/Z 输出互换。
+- **具体修改内容**:
+  - 将 `R_REFERENCE_TO_TARGET` 从 `target_xyz = [-ref_z, -ref_x, -ref_y]` 调整为 `target_xyz = [-ref_y, -ref_x, -ref_z]`。
+  - 仅修改平移方向修正矩阵，不改变 tracker 初始化参考系、scale、clip、姿态增量和 RealMan 下发逻辑。
 
 ### [2026-05-06]
 - **更新类型**: Docs / Test

@@ -74,3 +74,9 @@ data/
 
 third_party/
 dependencies/
+AGENTS.md
+.gitignore
+Project_Architecture_&_Changelog.md
+
+MEMORY.md
+.gitignore

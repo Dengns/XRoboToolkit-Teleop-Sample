@@ -22,7 +22,7 @@ from xrobotoolkit_teleop.common.xr_client import XrClient
 from xrobotoolkit_teleop.hardware.interface.rm75b import RM75BInterface
 from xrobotoolkit_teleop.utils.geometry import R_HEADSET_TO_WORLD
 
-DEFAULT_ARM_IP = "192.168.5.154"
+DEFAULT_ARM_IP = "192.168.5.200"
 DEFAULT_ARM_PORT = 8080
 DEFAULT_CONTROL_RATE_HZ = 50
 SCALE_OPTIONS = (0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0)
@@ -30,7 +30,7 @@ DEFAULT_XYZ_SCALE_FACTOR = 1.0
 DEFAULT_RPY_SCALE_FACTOR = 1.0
 DEFAULT_RPY_AXIS_MAP = (1, 0, 2)
 DEFAULT_RPY_AXIS_SIGN = (1.0, 1.0, 1.0)
-DEFAULT_MAX_DELTA_M = 0.25
+DEFAULT_MAX_DELTA_M = 0.5
 DEFAULT_RESET_ARM_POSE = (0.1166,0.0,0.7247,0.0,1.043,0.0)
 DEFAULT_RESET_STREAM_DURATION_S = 0.5
 JOYSTICK_SCALE_THRESHOLD = 0.6

@@ -1,23 +1,23 @@
 # `realman_contrl_steamvr_tracker.py` 快速使用说明
 
-这份说明只讲最基本的用法。
 
-## 1. 用哪个 conda 环境
+## 1.  conda 环境
 
 ```bash
 conda activate ts_pico_teleop
 cd /home/ubuntu/Shawn_tang_workspace/Pico/XRoboToolkit-Teleop-Sample-Python
 ```
 
-## 2. 怎么启动
+## 2. 启动
 
-如果机械臂 IP 就是脚本默认值 `192.168.5.200`，直接运行：
+机械臂目前有线链接绑定 `192.168.5.200`，直接运行：
 
 ```bash
 python test/realman_contrl_steamvr_tracker.py
 ```
 
-如果机械臂 IP 不是 `192.168.5.200`，手动写上：
+如果机械臂 IP 不是 `192.168.5.200`，
+网线链接机械臂，电脑ip改为手动分配，分配为192.168.5.xx然后进入`192.168.5.200`进行查看ip手动写上：
 
 ```bash
 python test/realman_contrl_steamvr_tracker.py --ip 你的机械臂IP
@@ -25,15 +25,14 @@ python test/realman_contrl_steamvr_tracker.py --ip 你的机械臂IP
 
 ## 3. 怎么跟随
 
-1. 先确认 SteamVR 里 tracker 在线。
+1. 打开steam确认 SteamVR 里 tracker 在线。
 2. 让这个终端窗口保持在当前焦点。
-3. 把 tracker 放到你想开始跟随的位置。
+3. 把 tracker 放到你想开始跟随的位置。标签向前
 4. 按住键盘空格键，开始跟随。
 5. 挪动或转动 tracker，机械臂会跟着动。
 6. 松开空格键，机械臂停止跟随。
 7. 结束时按 `Ctrl+C` 退出。
 
-补充一句：每次重新按住空格，脚本都会把“当前 tracker 位置”当成新的起点重新开始。
 
 ## 4. 最简单检查
 
