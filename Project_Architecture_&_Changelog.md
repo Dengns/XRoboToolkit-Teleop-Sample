@@ -420,3 +420,20 @@
     - conda 环境创建/更新方法
     - `openvr`、`Robotic_Arm`、`numpy` 的固定版本
     - 新服务器上的启动命令、运行检查项与常见报错处理方式
+
+### [2026-05-07]
+- **更新类型**: Docs / Environment
+- **修改目的/Bug现象**:
+  - 用户要求按照 `exo_ikfk_wuji_full_20260506/README_MIGRATION.md`，把外骨骼 IK/FK 到 WuJi 左手迁移包所需环境配置到现有 `ts_pico_teleop` conda 环境。
+  - 代码与文档证据显示该迁移包主链路依赖 `requirements/requirements-teleop.txt`，其中包含 `mujoco==3.6.0`、`dm_control==1.0.38`、`numpy==2.4.3`、`scipy==1.17.1`、`matplotlib==3.10.8`、`lxml==6.0.2`、`PyYAML==6.0.3`、`roslibpy==2.0.0`、`wujihandpy`；其中 `requirements-extra-linkerhand.txt` 仅在需要运行旧 LinkerHand/O6/O7 桥接或诊断脚本时再安装。
+- **具体修改内容**:
+  - 依据 `exo_ikfk_wuji_full_20260506/README_MIGRATION.md` 与 `exo_ikfk_wuji_full_20260506/requirements/requirements-teleop.txt`，在 `ts_pico_teleop` 环境内执行 `python -m pip install -r exo_ikfk_wuji_full_20260506/requirements/requirements-teleop.txt`。
+  - 安装后使用 `python -X utf8 -c "import numpy, scipy, mujoco, matplotlib, roslibpy, wujihandpy; print('imports ok')"` 验证，导入成功；实测版本为：
+    - `numpy 2.4.3`
+    - `scipy 1.17.1`
+    - `mujoco 3.6.0`
+    - `matplotlib 3.10.8`
+    - `roslibpy 2.0.0`
+    - `wujihandpy 1.6.0`
+  - 运行 `python -X utf8 -m unittest discover -s exo_ikfk_wuji_full_20260506/fangzhenyingshe/tests`，11 个单元测试全部通过，说明迁移包主入口的最小 Python 依赖闭环已满足。
+  - 记录环境风险：本次按迁移包要求把 `numpy` 升到 `2.4.3` 后，`pip` 明确提示当前环境中的 `lerobot 0.5.2`（要求 `numpy < 2.3.0`）和 `cmeel-boost 1.89.0`（要求 `numpy < 2.4`）存在版本冲突；因此 `ts_pico_teleop` 现已更适配该 WuJi 迁移包，但可能影响依赖旧 `numpy` 约束的既有链路，后续如需同时保留两套链路，建议拆分独立 conda 环境。
