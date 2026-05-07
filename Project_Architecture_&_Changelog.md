@@ -461,3 +461,25 @@
   - 记录共存结论：
     - 当前没有发现“原 SteamVR/RM75 脚本”与“exo_ikfk_wuji_full_20260506 迁移包”之间的直接代码级冲突；两边入口都能完成导入和参数解析。
     - 当前更显著的风险仍是环境级版本冲突提示：`numpy 2.4.3` 与 `lerobot 0.5.2`、`cmeel-boost 1.89.0` 约束不兼容。该风险目前未在上述两个入口上复现为启动失败，但可能影响同环境中的其它链路。
+
+### [2026-05-07]
+- **更新类型**: Bugfix / Delivery
+- **修改目的/Bug现象**:
+  - 用户要求重点确认“刚刚安装的包升级/降级后，当前仓库现有脚本是否仍兼容运行”，并继续排查 `exo_ikfk_wuji_full_20260506` 中可能影响本机迁移使用的强制写死路径/地址。
+  - 代码证据显示，`exo_ikfk_wuji_full_20260506/fangzhenyingshe/scripts/compare_hand_3d_live.py` 中 `DEFAULT_EXTERNAL_REPO` 仍写死为原 Windows 现场路径 `C:\Users\Administrator\Desktop\工作学习\rimbot\机器人操控`，导致当前 Linux 工作区下不显式传 `--external-repo` 时，脚本会先于 rosbridge 阶段直接报“外部项目目录不存在”。
+- **具体修改内容**:
+  - 兼容性复核：
+    - 在 `ts_pico_teleop` 环境中重新执行以下脚本的 `py_compile` 与 `--help` 最小验证，均通过：
+      - `test/realman_contrl_steamvr_tracker.py`
+      - `test/test_pose_precision.py`
+      - `test/realman_contrl_motion_tracker.py`
+      - `test/realman_contrl_lxqs.py`
+      - `scripts/simulation/teleop_pico_motion_tracker.py`
+    - 同时验证 `openvr`、`Robotic_Arm`、`roslibpy`、`wujihandpy`、`mujoco`、`numpy` 与 `RM75BInterface` 仍可在当前环境中共同导入，说明本次依赖版本调整尚未把上述现有脚本的最小启动链路破坏。
+  - 修复迁移包默认路径：
+    - 将 `exo_ikfk_wuji_full_20260506/fangzhenyingshe/scripts/compare_hand_3d_live.py` 中的 `DEFAULT_EXTERNAL_REPO` 改为基于脚本位置计算的包内相对路径：`Path(__file__).resolve().parents[2] / "external_robot_control"`。
+    - 更新 `exo_ikfk_wuji_full_20260506/README_MIGRATION.md`，将干跑、标定、正式运行命令改为默认不再强制要求传 `--external-repo ../external_robot_control`；仅在用户自行调整目录结构时再显式覆盖该参数。
+  - 修改后验证：
+    - `teleop_exo_to_wuji_left.py --help` 继续正常。
+    - `fangzhenyingshe/tests` 的 11 个单元测试继续全部通过。
+    - `teleop_exo_to_wuji_left.py --dry-run` 不再报“外部项目目录不存在”，而是继续执行到 `RealtimeSkeletonStream.start()` 后因 `roslibpy.core.RosTimeoutError: Failed to connect to ROS` 停止，说明默认路径修复已生效；当前剩余阻塞仅在用户明确要求暂时跳过的 rosbridge/ROS 连接部分。
