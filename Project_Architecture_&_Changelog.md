@@ -437,3 +437,27 @@
     - `wujihandpy 1.6.0`
   - 运行 `python -X utf8 -m unittest discover -s exo_ikfk_wuji_full_20260506/fangzhenyingshe/tests`，11 个单元测试全部通过，说明迁移包主入口的最小 Python 依赖闭环已满足。
   - 记录环境风险：本次按迁移包要求把 `numpy` 升到 `2.4.3` 后，`pip` 明确提示当前环境中的 `lerobot 0.5.2`（要求 `numpy < 2.3.0`）和 `cmeel-boost 1.89.0`（要求 `numpy < 2.4`）存在版本冲突；因此 `ts_pico_teleop` 现已更适配该 WuJi 迁移包，但可能影响依赖旧 `numpy` 约束的既有链路，后续如需同时保留两套链路，建议拆分独立 conda 环境。
+
+### [2026-05-07]
+- **更新类型**: Docs / Validation
+- **修改目的/Bug现象**:
+  - 用户要求检查“原来的脚本”和“现在新加入文件夹”是否存在冲突，以及两边在当前 `ts_pico_teleop` 环境里能否都跑。
+  - 当前工作区实际存在的两个入口分别是：
+    - 原脚本 `test/realman_contrl_steamvr_tracker.py`
+    - 新加入目录 `exo_ikfk_wuji_full_20260506/`
+  - 文档里提到的 `delivery/steamvr_rm75_bundle/` 当前仓库中不存在，因此本次未把它作为实际可验证目标。
+- **具体修改内容**:
+  - 验证原脚本链路：
+    - `python test/realman_contrl_steamvr_tracker.py --help` 可正常输出参数帮助。
+    - `openvr.init()` 可成功初始化，`openvr`、`Robotic_Arm`、`RM75BInterface` 均可导入。
+    - 用 `--ip 127.0.0.1 --port 1` 做最小启动探测时，脚本已成功走过 OpenVR 初始化和终端按键监听，最终只在 `RM75BInterface` 连接机械臂时失败，说明当前环境未把原脚本依赖链路破坏。
+    - 直接探测默认机械臂地址 `192.168.8.200:8080` 时 TCP 超时，说明原脚本当前无法“完整实跑”的主要阻塞在现场机械臂连通性，而不是 Python 包冲突。
+  - 验证新加入目录链路：
+    - `python -X utf8 scripts/teleop_exo_to_wuji_left.py --help` 可正常输出参数帮助。
+    - 其 `fangzhenyingshe/tests` 的 11 个单元测试继续全部通过。
+    - 直接执行 `--dry-run` 会失败，原因是 `compare_hand_3d_live.py` 中 `DEFAULT_EXTERNAL_REPO` 仍是 Windows 路径，Linux 当前仓库下默认找不到该目录。
+    - 显式传入 `--external-repo ../external_robot_control` 后，脚本可继续向前执行，但在 `RealtimeSkeletonStream.start()` 阶段抛出 `roslibpy.core.RosTimeoutError: Failed to connect to ROS`。
+    - 同时用原生 socket 探测 `10.42.0.3:9090` 时 TCP 可连通，说明当前问题更像 rosbridge WebSocket 握手/服务状态异常，而不是本次安装带来的 Python 依赖冲突。
+  - 记录共存结论：
+    - 当前没有发现“原 SteamVR/RM75 脚本”与“exo_ikfk_wuji_full_20260506 迁移包”之间的直接代码级冲突；两边入口都能完成导入和参数解析。
+    - 当前更显著的风险仍是环境级版本冲突提示：`numpy 2.4.3` 与 `lerobot 0.5.2`、`cmeel-boost 1.89.0` 约束不兼容。该风险目前未在上述两个入口上复现为启动失败，但可能影响同环境中的其它链路。
