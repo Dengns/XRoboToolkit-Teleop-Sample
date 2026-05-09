@@ -45,7 +45,7 @@ DEFAULT_ARM_IP = "10.10.10.100"
 DEFAULT_ARM_PORT = 8080
 DEFAULT_CONTROL_RATE_HZ = 50                
 DEFAULT_XYZ_SCALE_FACTOR = 1.0
-SCALE_OPTIONS = (0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0)
+SCALE_OPTIONS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
 DEFAULT_XYZ_AXIS_MAP = (0, 1, 2)
 DEFAULT_ROTVEC_AXIS_MAP = (1, 0, 2)
 DEFAULT_ROTVEC_AXIS_SIGN = (-1.0, 1.0, 1.0)
@@ -448,7 +448,7 @@ class TerminalKeyMonitor:
     通过 cbreak 模式逐字节读取终端输入，不需要回车即可执行：
     - Space: 切换跟随启停
     - 上/下方向键: 调整 xyz scale 档位
-    - 数字 1-9: 直接切到预设 xyz scale 档位
+    - 数字 0-9: 直接切到预设 xyz scale 档位
     """
 
     def __init__(self, toggle_key: str):
@@ -466,7 +466,7 @@ class TerminalKeyMonitor:
         print(
             "[INFO] 当前使用终端按键模式："
             "请保持终端焦点。"
-            "空格切换开始/停止跟随，方向键上/下调节 xyz scale，数字键 1-9 直接切换预设 scale 档位。"
+            "空格切换开始/停止跟随，方向键上/下调节 xyz scale，数字键 1-9 对应 0.1-0.9，数字键 0 对应 1.0。"
         )
 
     def _matches(self, char: str) -> bool:
@@ -506,7 +506,7 @@ class TerminalKeyMonitor:
             del self.buffer[:1]
             if self._matches(char):
                 self._append_command("toggle")
-            elif "1" <= char <= "9":
+            elif "0" <= char <= "9":
                 self._append_command("scale_digit", int(char))
 
     def poll(self):
@@ -620,11 +620,15 @@ class RealmanSteamVrTrackerTeleop:
         self.log_info(f"{source}：tracker xyz scale 调整为 {self.xyz_scale_factor:g}")
 
     def set_scale_by_digit(self, digit: int):
-        if not 1 <= digit <= len(SCALE_OPTIONS):
+        if digit == 0:
+            scale_index = len(SCALE_OPTIONS) - 1
+        elif 1 <= digit <= min(9, len(SCALE_OPTIONS)):
+            scale_index = digit - 1
+        else:
             self.log_warning(f"数字键 {digit} 超出可用 scale 档位范围。")
             return
 
-        self.xyz_scale_factor = SCALE_OPTIONS[digit - 1]
+        self.xyz_scale_factor = SCALE_OPTIONS[scale_index]
         self.log_info(f"数字键 {digit}：tracker xyz scale 调整为 {self.xyz_scale_factor:g}")
 
     def read_tracker_pose(self) -> TrackerPoseSample:
