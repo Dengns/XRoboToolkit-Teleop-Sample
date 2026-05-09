@@ -534,3 +534,15 @@
     - 对 `xyz` 与 `rpy` 同时乘以统一运行时 `scale` 后，再积分到机械臂 `target_pose=[x,y,z,rx,ry,rz]`。
     - 对 xyz 应用 `WORKSPACE_MIN/MAX`，对 rpy 应用 `wrap_angle()`，最后使用 `rm_movep_canfd()` 连续发送。
   - 针对 `spacemouse2rm75b/config.py` 当前 `AXIS_ENABLE=[1,1,1,0,0,1]` 只放开 xyz 和单一旋转轴的现状，新脚本默认强制启用全部 6 轴，满足“把 rpy 数据也加进来控制”的新需求。
+
+### [2026-05-09]
+- **更新类型**: Bugfix / Test
+- **修改目的/Bug现象**:
+  - 用户现场反馈 `test/realman_contrl_spacemouse.py` 的姿态映射中，“俯仰”和“绕自身轴旋转”两个通道交错，但平面内旋转通道仍然正确。
+  - 代码证据显示新脚本当前直接沿用 `DEFAULT_AXIS_MAP=(2,0,1,5,3,4)`，对应旋转输出为 `rx<-raw_rz`、`ry<-raw_rx`、`rz<-raw_ry`，没有像项目中既有 `test/realman_contrl_lxqs.py` / `test/realman_contrl_motion_tracker.py` 那样提供“交换前两个旋转通道、保持第三个不变”的显式重排层。
+- **具体修改内容**:
+  - 为 `test/realman_contrl_spacemouse.py` 新增 `DEFAULT_ROTATION_AXIS_MAP = (1, 0, 2)`。
+  - 在 `compute_delta()` 中对已经完成 SpaceMouse 轴号重排、方向修正和旋转步长缩放后的 `delta[3:]` 再执行一次旋转通道重排：
+    - 交换前两个姿态通道
+    - 保持第三个姿态通道不变
+  - 初始化日志中新增 `ROTATION_AXIS_MAP` 打印，便于后续现场继续核对当前姿态映射配置。

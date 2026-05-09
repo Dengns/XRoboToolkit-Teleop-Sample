@@ -40,6 +40,7 @@ DEFAULT_MAX_ROTATION_PER_CYCLE = 0.01
 DEFAULT_EMA_ALPHA = 1.0
 DEFAULT_AXIS_SIGNS = (1.0, -1.0, 1.0, -1.0, 1.0, 1.0)
 DEFAULT_AXIS_MAP = (2, 0, 1, 5, 3, 4)
+DEFAULT_ROTATION_AXIS_MAP = (1, 0, 2)
 DEFAULT_WORKSPACE_MIN = (-0.5, -0.5, 0.0)
 DEFAULT_WORKSPACE_MAX = (0.5, 0.5, 0.7)
 SPNAV_EVENT_MOTION = 1
@@ -361,6 +362,7 @@ class RealmanSpacemouseTeleop:
             "当前 SpaceMouse 映射参数沿用 spacemouse2rm75b/config.py 的既有设置："
             f"AXIS_MAP={list(DEFAULT_AXIS_MAP)}, "
             f"AXIS_SIGNS={list(DEFAULT_AXIS_SIGNS)}, "
+            f"ROTATION_AXIS_MAP={list(DEFAULT_ROTATION_AXIS_MAP)}, "
             f"TRANSLATION_SCALE={DEFAULT_TRANSLATION_SCALE:g}, "
             f"ROTATION_SCALE={DEFAULT_ROTATION_SCALE:g}, "
             f"EMA_ALPHA={DEFAULT_EMA_ALPHA:g}, "
@@ -401,6 +403,7 @@ class RealmanSpacemouseTeleop:
         delta = np.zeros(6, dtype=float)
         delta[:3] = self.smoothed_axes[:3] * float(DEFAULT_TRANSLATION_SCALE)
         delta[3:] = self.smoothed_axes[3:] * float(DEFAULT_ROTATION_SCALE)
+        delta[3:] = delta[3:][list(DEFAULT_ROTATION_AXIS_MAP)]
 
         delta *= self.runtime_scale_factor
 
