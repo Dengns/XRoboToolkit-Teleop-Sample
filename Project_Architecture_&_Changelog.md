@@ -546,3 +546,14 @@
     - 交换前两个姿态通道
     - 保持第三个姿态通道不变
   - 初始化日志中新增 `ROTATION_AXIS_MAP` 打印，便于后续现场继续核对当前姿态映射配置。
+
+### [2026-05-09]
+- **更新类型**: Refactor / Test
+- **修改目的/Bug现象**:
+  - 用户要求将 `test/realman_contrl_spacemouse.py` 改为锁定机械臂姿态，使 SpaceMouse 只操控 xyz，rpy 一直保持程序启动时刻状态。
+  - 代码证据显示当前 `control_loop()` 仍执行 `self.target_pose += delta`，即便后续不再关心姿态映射，`compute_delta()` 产出的旋转增量仍会持续累积到 `target_pose[3:]`。
+- **具体修改内容**:
+  - 为 `RealmanSpacemouseTeleop` 新增 `initial_locked_rpy`，在 `init_hardware()` 成功读取机械臂初始末端位姿后立即缓存启动时刻的姿态。
+  - 调整 `control_loop()`：只对 `target_pose[:3]` 累积当前帧的 SpaceMouse xyz 增量，不再把旋转增量积分进目标姿态。
+  - 调整 `clamp_target_pose()`：每个控制周期都把 `target_pose[3:]` 强制恢复为 `initial_locked_rpy`，确保最终通过 `rm_movep_canfd()` 下发的 rpy 始终锁定在启动姿态。
+  - 启动日志改为打印“已锁定启动时刻 rpy”，并明确说明脚本当前只控制 xyz。

@@ -327,6 +327,7 @@ class RealmanSpacemouseTeleop:
         self.key_monitor: TerminalDigitScaleMonitor | None = None
 
         self.target_pose: np.ndarray | None = None
+        self.initial_locked_rpy: np.ndarray | None = None
         self.runtime_scale_factor = self.config.initial_scale_factor
         self.axis_enable = np.asarray(DEFAULT_AXIS_ENABLE, dtype=float)
         self.smoothed_axes = np.zeros(6, dtype=float)
@@ -338,8 +339,9 @@ class RealmanSpacemouseTeleop:
             f"当前统一增量比例 scale={self.runtime_scale_factor:g}，可用档位: {format_scale_options()}"
         )
         self.log_info(
-            "控制说明：平移 xyz 与姿态 rpy 都走积分增量，"
-            "每一帧都会先处理数字键，再按当前 scale 计算本帧增量。"
+            "控制说明：SpaceMouse 现在只积分控制 xyz，"
+            "rpy 固定保持程序启动时刻的机械臂姿态；"
+            "每一帧都会先处理数字键，再按当前 scale 计算本帧 xyz 增量。"
         )
 
     def log_info(self, message: str):
@@ -356,8 +358,10 @@ class RealmanSpacemouseTeleop:
 
         self.arm = RM75BInterface(self.config.arm_ip, self.config.arm_port, enable_gripper=False)
         self.target_pose = read_arm_pose(self.arm)
+        self.initial_locked_rpy = self.target_pose[3:].copy()
 
         self.log_info(f"机械臂连接成功，当前末端位姿: {np.round(self.target_pose, 4).tolist()}")
+        self.log_info(f"已锁定启动时刻 rpy: {np.round(self.initial_locked_rpy, 4).tolist()}")
         self.log_info(
             "当前 SpaceMouse 映射参数沿用 spacemouse2rm75b/config.py 的既有设置："
             f"AXIS_MAP={list(DEFAULT_AXIS_MAP)}, "
@@ -423,12 +427,13 @@ class RealmanSpacemouseTeleop:
 
     def clamp_target_pose(self):
         assert self.target_pose is not None
+        assert self.initial_locked_rpy is not None
         self.target_pose[:3] = np.clip(
             self.target_pose[:3],
             np.asarray(DEFAULT_WORKSPACE_MIN, dtype=float),
             np.asarray(DEFAULT_WORKSPACE_MAX, dtype=float),
         )
-        self.target_pose[3:] = wrap_angle(self.target_pose[3:])
+        self.target_pose[3:] = wrap_angle(self.initial_locked_rpy.copy())
 
     def send_target_pose(self):
         assert self.arm is not None
@@ -456,13 +461,15 @@ class RealmanSpacemouseTeleop:
     def control_loop(self):
         assert self.mouse is not None
         assert self.target_pose is not None
+        assert self.initial_locked_rpy is not None
 
         # 先处理数字键，保证新的 scale 从当前控制帧就参与本帧积分。
         self.handle_runtime_scale_commands()
 
         raw_axes = self.mouse.get_axes()
         delta = self.compute_delta(raw_axes)
-        self.target_pose += delta
+        self.target_pose[:3] += delta[:3]
+        self.target_pose[3:] = self.initial_locked_rpy.copy()
         self.clamp_target_pose()
         self.send_target_pose()
 
