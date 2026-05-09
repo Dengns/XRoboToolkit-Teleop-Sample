@@ -26,6 +26,7 @@
 | `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` / `record_grip_press_event` / `log_grip_release_comparison` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端，并在 grip 按下/松开时记录手柄与机械臂位姿做 scale 感知 xyz 偏移对比 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
 | `test/realman_contrl_motion_tracker.py` | `RealmanMotionTrackerTeleop` / `read_motion_tracker_pose` / `iter_motion_tracker_pose_values` / `parse_pose_7d` / `record_a_start_event` / `log_a_stop_event_comparison` | 使用 Pico Motion Tracker 的相对 xyz+rpy 位姿直连控制 RM75-B 末端，A 键切换启停并记录启停事件 xyz 偏移对比，B 键复位，右摇杆调 scale，支持固定复位末端位姿 | 不按 SN 过滤，兼容 `pose` 和原始 `joints[*].p`；依赖 RealMan `rm_movep_canfd` |
 | `test/realman_contrl_steamvr_tracker.py` | `RealmanSteamVrTrackerTeleop` / `SteamVrTrackerReader` / `TerminalKeyMonitor` / `KeyCommand` / `convert_openvr_pose` / `build_z_axis_rotation_matrix` / `log_pose_debug` | 使用 SteamVR/OpenVR 单个 Vive Tracker 的相对 xyz 与姿态增量控制 RM75-B，空格键切换开始/停止跟随；支持终端中通过 `↑/↓` 或数字键 `1-9` 即时调整 xyz 映射比例，并在 OpenVR 绝对位姿映射后再追加一层水平朝向校准，同时按低频打印 raw/project_world/control 三套位姿证据用于现场校轴；旋转映射支持独立配置 rotvec 通道顺序与方向 | 固定使用 OpenVR standing universe + 项目 `R_HEADSET_TO_WORLD` 坐标变换；新增终端即时按键事件监听与离散 `xyz scale` 档位；支持 `--world-yaw-offset-deg`、`--debug-pose`、`--pose-log-interval`、`--rotvec-axis-map`、`--rotvec-axis-sign`；通过 RealMan 7 维四元数位姿透传 |
+| `test/realman_contrl_spacemouse.py` | `RealmanSpacemouseTeleop` / `TerminalDigitScaleMonitor` / `SpaceMouseReader` / `resolve_libspnav_path` / `read_arm_pose` / `wrap_angle` / `map_scale_digit_to_factor` | 使用 SpaceMouse 六轴输入对 RM75-B 做 xyz+rpy 积分增量控制；程序启动即进入控制，无需空格，数字键 `1-9/0` 即时切换统一增量比例，且新比例只从当前帧起作用 | 脚本内聚 `ctypes + libspnav` 读取逻辑，并沿用 `spacemouse2rm75b/config.py` 同款轴映射、基础步长和工作空间限制；为满足新需求，默认强制启用全部 6 轴 |
 | `test/steamvr_tracker_body_frame_probe.py` | `run_probe` / `read_tracker_pose` / `print_body_axes` / `print_reference_delta` | 只读观察 SteamVR/Vive Tracker 本体坐标系：打印 tracker 局部 +X/+Y/+Z 在 OpenVR standing universe 中的方向，并在启动瞬间锁定初始化参考系后持续输出相对 xyz/姿态增量 | 不连接机械臂；直接使用 OpenVR 原始位姿矩阵列向量识别 tracker 本体轴；用于后续把 tracker 与机械臂同向摆放后建立与基站摆放无关的初始化参考系 |
 | `test/realman_coordinate_system.py` | `run_coordinate_test` / `stream_pose` / `build_axis_target` | 通过固定原点和 xyz 正负 10cm 往返移动验证 RM75 Base 坐标系方向 | 依赖 `RM75BInterface`、RealMan `rm_movep_canfd` |
 | `scripts/simulation/teleop_pico_motion_tracker.py` | `MotionTrackerVisualizer` / `iter_motion_tracker_pose_values` / `convert_pose_to_visual_coordinate` | 从 Pico Motion Tracker 读取 pose，在 MeshCat 中按 Pico 原始坐标系可视化 tracker 位置、局部坐标轴和读取 FPS | 默认 `raw_pico` 坐标；可用 `--coordinate-mode project_world` 切换到项目 world 坐标 |
@@ -513,3 +514,23 @@
     - `1-9` 对应 `0.1-0.9`
     - `0` 对应 `1.0`
   - 同步更新 `test/realman_contrl_steamvr_tracker_usage.md`，把档位表和按键说明改为 `0.1-1.0` 新规则。
+
+### [2026-05-09]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户要求参考 `test/wuji_twizzer.py` 的既有 SpaceMouse 机械臂控制历程，新建一个独立脚本改为直接用 SpaceMouse 控制 RM75-B。
+  - 用户明确要求增量控制改为“每帧积分”，并保留 `1234567890` 作为统一增量比例档位切换；每次切换后只能从该帧开始生效，不能像当前 SteamVR 相对原点缩放那样把历史位移一起重算。
+  - 用户补充当前历程只控制 xyz，不包含 rpy；新脚本需要把 rpy 也纳入控制，并且 rpy 同样受运行时比例系数影响。
+- **具体修改内容**:
+  - 新增 `test/realman_contrl_spacemouse.py`，将 `SpaceMouseReader` 所需的 `ctypes + libspnav` 读取逻辑直接内聚到脚本内，并沿用 `spacemouse2rm75b/config.py` 既有的轴映射、基础平移/旋转步长与工作空间限制常量。
+  - 新增 `resolve_libspnav_path()`，优先使用 `spacemouse2rm75b/libspnav.so.0.4`，找不到时自动回退系统 `libspnav.so` / `libspnav.so.0`，避免新脚本运行时强依赖未纳管目录。
+  - 新增 `TerminalDigitScaleMonitor`，使用终端 `tty.setcbreak()` + `select()` 即时监听数字键：
+    - `1-9` 对应 `scale 0.1-0.9`
+    - `0` 对应 `scale 1.0`
+    - 按键后无需回车，且在每个控制周期内先处理数字键，再读取 SpaceMouse 轴值，从而保证新比例“从当前帧开始生效”。
+  - 新增 `RealmanSpacemouseTeleop`，控制逻辑改为：
+    - 启动即进入控制，不再需要空格启停。
+    - 将 SpaceMouse 6 轴原始值按 `AXIS_MAP`、`AXIS_SIGNS`、`EMA_ALPHA`、`TRANSLATION_SCALE`、`ROTATION_SCALE` 映射为本帧 `xyz+rpy` 增量。
+    - 对 `xyz` 与 `rpy` 同时乘以统一运行时 `scale` 后，再积分到机械臂 `target_pose=[x,y,z,rx,ry,rz]`。
+    - 对 xyz 应用 `WORKSPACE_MIN/MAX`，对 rpy 应用 `wrap_angle()`，最后使用 `rm_movep_canfd()` 连续发送。
+  - 针对 `spacemouse2rm75b/config.py` 当前 `AXIS_ENABLE=[1,1,1,0,0,1]` 只放开 xyz 和单一旋转轴的现状，新脚本默认强制启用全部 6 轴，满足“把 rpy 数据也加进来控制”的新需求。
