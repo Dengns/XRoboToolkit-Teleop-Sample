@@ -1,0 +1,26 @@
+{
+  "mode": "ros-host-bridge-probe",
+  "duration_s": 40.0,
+  "topic": "/mocap/skeleton_data",
+  "ws_host": "127.0.0.1",
+  "ws_port": 9090,
+  "record_count": 4724,
+  "ros_host_and_rosbridge_matched_count": 4596,
+  "ros_host_to_rosbridge_client_ms": {
+    "count": 4596,
+    "mean": 6.158809022628361,
+    "p50": 4.030495,
+    "p95": 13.9839425,
+    "max": 45.047396,
+    "min": 0.905322,
+    "range": 44.142074
+  },
+  "source_stamp_paths": {
+    "msg.header.stamp": 9437
+  },
+  "notes": [
+    "本脚本必须运行在 10.42.0.3 上，才能保证 ROS2 回调时间与 rosbridge 本地客户端时间处于同一主机时钟基准。",
+    "若 source_stamp_ns 存在，则优先按 source stamp 对齐；否则退回到前几组 joint name/position 指纹。",
+    "本脚本记录的是 ROS2 主机本地 callback -> localhost rosbridge websocket client 的时间，不包含远端控制机网络段。"
+  ]
+}

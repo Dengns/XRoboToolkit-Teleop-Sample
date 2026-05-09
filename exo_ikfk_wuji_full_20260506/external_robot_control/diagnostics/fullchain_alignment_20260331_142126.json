@@ -1,0 +1,124 @@
+{
+  "generated_at": "2026-03-31 14:21:26",
+  "local_report": "latency_fullchain_20260331_141808.json",
+  "remote_report": "ros_host_bridge_probe_20260331_141745.json",
+  "clock_offset_estimate": {
+    "method": "ssh_exec_midpoint_min_rtt",
+    "sample_count": 15,
+    "selected_roundtrip_ms": 58.1732,
+    "selected_offset_ms": -165.388274,
+    "all_roundtrip_ms": [
+      410.472,
+      77.781,
+      103.281,
+      88.503,
+      100.072,
+      59.834,
+      117.656,
+      85.207,
+      66.875,
+      97.941,
+      58.173,
+      82.592,
+      64.586,
+      76.517,
+      81.738
+    ]
+  },
+  "match_stats": {
+    "remote_rows_with_stamp": 1439,
+    "local_rows_with_stamp": 1426,
+    "merged_rows": 0,
+    "matched_sent_to_hand_rows": 0,
+    "local_message_count": 1442,
+    "local_sent_count": 130,
+    "remote_record_count": 1440
+  },
+  "segments_ms": {
+    "source_to_ros_host_callback_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "ros_host_callback_to_remote_rosbridge_client_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "remote_rosbridge_to_local_arrival_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "local_arrival_to_parse_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "parse_to_pose_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "local_arrival_to_command_selected_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "command_selected_to_send_thread_pick_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "command_selected_to_write_start_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "cmd_write_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "source_to_cmd_write_end_aligned_ms": {
+      "count": 0,
+      "mean": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "min": 0.0
+    }
+  },
+  "notes": [
+    "remote_rosbridge_to_local_arrival_ms ??? SSH ????????????????????? SSH ???????",
+    "source_to_cmd_write_end_aligned_ms ??? sent_to_hand=True ????",
+    "???????? 20Hz ????? 20Hz ?????fullchain ???????????"
+  ]
+}

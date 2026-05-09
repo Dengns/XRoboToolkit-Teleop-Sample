@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-03-31 10:42:28",
+  "joint_map": {
+    "thumb_cmc_pitch": "joint_RightSkeletonThumbBase",
+    "thumb_cmc_yaw": "joint_RightSkeletonThumbBase",
+    "index_mcp_pitch": "joint_RightSkeletonIndex4",
+    "middle_mcp_pitch": "joint_RightSkeletonMiddle4",
+    "ring_mcp_pitch": "joint_RightSkeletonRing4",
+    "pinky_mcp_pitch": "joint_RightSkeletonPinky4"
+  },
+  "open_base": {
+    "joint_RightSkeletonThumbBase": 0.480135977268219,
+    "joint_RightSkeletonThumb1": 0.6265098146597544,
+    "joint_RightSkeletonThumb2": 0.07708253711462021,
+    "joint_RightSkeletonThumb3": 5.546895542144775,
+    "joint_RightSkeletonThumb4": 6.137840747833252,
+    "joint_RightSkeletonIndex1": 0.3607633924484253,
+    "joint_RightSkeletonIndex2": 0.09165535122156143,
+    "joint_RightSkeletonIndex3": 4.653115949630737,
+    "joint_RightSkeletonIndex4": 0.30824423710505167,
+    "joint_RightSkeletonMiddle1": 0.01677105061088999,
+    "joint_RightSkeletonMiddle2": 0.40957286953926086,
+    "joint_RightSkeletonMiddle3": 4.6273551877339685,
+    "joint_RightSkeletonMiddle4": 0.37009456773598987,
+    "joint_RightSkeletonRing1": 6.176874837875366,
+    "joint_RightSkeletonRing2": 0.610140860080719,
+    "joint_RightSkeletonRing3": 4.4536887550354,
+    "joint_RightSkeletonRing4": 0.34207770228385925,
+    "joint_RightSkeletonPinky1": 5.897425378163655,
+    "joint_RightSkeletonPinky2": 1.0856748819351196,
+    "joint_RightSkeletonPinky3": 3.8175118859608967,
+    "joint_RightSkeletonPinky4": 0.8325680494308472
+  }
+}

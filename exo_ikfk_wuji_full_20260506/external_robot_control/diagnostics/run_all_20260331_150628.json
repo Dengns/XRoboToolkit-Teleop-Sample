@@ -1,0 +1,43 @@
+{
+  "mode": "run-all",
+  "generated_at": "2026-03-31 15:06:34",
+  "reports": [
+    {
+      "label": "thumb-audit",
+      "csv": "C:\\Users\\Administrator\\Desktop\\工作学习\\rimbot\\机器人操控\\diagnostics\\thumb_audit_20260331_150629.csv",
+      "json": "C:\\Users\\Administrator\\Desktop\\工作学习\\rimbot\\机器人操控\\diagnostics\\thumb_audit_20260331_150629.json"
+    },
+    {
+      "label": "latency-pipeline",
+      "csv": "C:\\Users\\Administrator\\Desktop\\工作学习\\rimbot\\机器人操控\\diagnostics\\latency_pipeline_20260331_150631.csv",
+      "json": "C:\\Users\\Administrator\\Desktop\\工作学习\\rimbot\\机器人操控\\diagnostics\\latency_pipeline_20260331_150631.json"
+    },
+    {
+      "label": "stability",
+      "csv": "C:\\Users\\Administrator\\Desktop\\工作学习\\rimbot\\机器人操控\\diagnostics\\stability_20260331_150633.csv",
+      "json": "C:\\Users\\Administrator\\Desktop\\工作学习\\rimbot\\机器人操控\\diagnostics\\stability_20260331_150633.json"
+    }
+  ],
+  "steps": [
+    {
+      "step": "thumb-audit",
+      "status": "completed",
+      "elapsed_s": 1.41
+    },
+    {
+      "step": "latency-pipeline",
+      "status": "completed",
+      "elapsed_s": 2.395,
+      "duration_s": 1.0
+    },
+    {
+      "step": "stability",
+      "status": "completed",
+      "elapsed_s": 2.39,
+      "duration_s": 1.0,
+      "drive_hand": false
+    }
+  ],
+  "remote_alignment_enabled": false,
+  "remote_host": ""
+}

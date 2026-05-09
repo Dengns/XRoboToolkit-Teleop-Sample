@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-03-31 14:24:35",
+  "local_report": "latency_fullchain_20260331_142210.json",
+  "remote_report": "ros_host_bridge_probe_20260331_142207.json",
+  "clock_offset_estimate": {
+    "method": "ssh_exec_midpoint_min_rtt",
+    "sample_count": 21,
+    "selected_roundtrip_ms": 53.7297,
+    "selected_offset_ms": -169.520254,
+    "all_roundtrip_ms": [
+      587.346,
+      66.32,
+      83.222,
+      94.816,
+      68.18,
+      90.253,
+      62.652,
+      61.234,
+      99.014,
+      105.68,
+      70.232,
+      70.344,
+      96.752,
+      64.192,
+      76.339,
+      53.73,
+      74.559,
+      83.031,
+      94.055,
+      92.827,
+      65.204
+    ]
+  },
+  "match_stats": {
+    "remote_rows_with_stamp": 4723,
+    "local_rows_with_stamp": 1427,
+    "merged_rows": 1427,
+    "matched_sent_to_hand_rows": 131,
+    "local_message_count": 1441,
+    "local_sent_count": 131,
+    "remote_record_count": 4724
+  },
+  "segments_ms": {
+    "source_to_ros_host_callback_ms": {
+      "count": 1427,
+      "mean": 39.56241944428867,
+      "p50": 38.860365,
+      "p95": 43.9789874,
+      "max": 53.919243,
+      "min": 36.500808
+    },
+    "ros_host_callback_to_remote_rosbridge_client_ms": {
+      "count": 1425,
+      "mean": 5.779456892631594,
+      "p50": 3.960204,
+      "p95": 13.6503088,
+      "max": 25.9382,
+      "min": 1.267569
+    },
+    "remote_rosbridge_to_local_arrival_ms": {
+      "count": 1425,
+      "mean": 19.211321280701743,
+      "p50": 16.251787,
+      "p95": 39.98350139999998,
+      "max": 84.475729,
+      "min": -3.018392
+    },
+    "local_arrival_to_parse_ms": {
+      "count": 1427,
+      "mean": 0.01443833216538192,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 1.2155,
+      "min": 0.0
+    },
+    "parse_to_pose_ms": {
+      "count": 1427,
+      "mean": 0.38194449894884397,
+      "p50": 0.0,
+      "p95": 1.00897,
+      "max": 2.5618,
+      "min": 0.0
+    },
+    "local_arrival_to_command_selected_ms": {
+      "count": 199,
+      "mean": 0.6062195979899497,
+      "p50": 0.9074,
+      "p95": 1.0285699999999998,
+      "max": 2.5618,
+      "min": 0.0
+    },
+    "command_selected_to_send_thread_pick_ms": {
+      "count": 131,
+      "mean": 29.430791603053425,
+      "p50": 28.5048,
+      "p95": 58.693200000000004,
+      "max": 69.8386,
+      "min": 0.0
+    },
+    "command_selected_to_write_start_ms": {
+      "count": 131,
+      "mean": 29.430791603053425,
+      "p50": 28.5048,
+      "p95": 58.693200000000004,
+      "max": 69.8386,
+      "min": 0.0
+    },
+    "cmd_write_ms": {
+      "count": 131,
+      "mean": 41.141035877862585,
+      "p50": 41.0492,
+      "p95": 42.07985,
+      "max": 43.1059,
+      "min": 40.3997
+    },
+    "source_to_cmd_write_end_aligned_ms": {
+      "count": 131,
+      "mean": 142.2303476946565,
+      "p50": 140.959306,
+      "p95": 190.621358,
+      "max": 235.670309,
+      "min": 98.960711
+    }
+  },
+  "notes": [
+    "?????? SSH ?????????????????? PTP/NTP ??????",
+    "remote_rosbridge_to_local_arrival_ms ?????????? 10.42.0.3 rosbridge ??? roslibpy ??????????",
+    "source_to_cmd_write_end_aligned_ms ???? source stamp ? COM10 ?????????????"
+  ]
+}

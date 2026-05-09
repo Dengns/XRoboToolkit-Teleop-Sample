@@ -1,0 +1,161 @@
+{
+  "generated_at": "2026-03-31 15:04:44",
+  "local_report": "latency_fullchain_20260331_150412.json",
+  "remote_report": "ros_host_bridge_probe_20260331_150410.json",
+  "clock_offset_estimate": {
+    "method": "ssh_exec_midpoint_min_rtt",
+    "sample_count": 21,
+    "selected_roundtrip_ms": 54.2666,
+    "selected_offset_ns": -222695925,
+    "selected_offset_ms": -222.695925,
+    "all_roundtrip_ms": [
+      439.277,
+      95.817,
+      58.412,
+      114.152,
+      71.041,
+      54.267,
+      72.06,
+      83.076,
+      68.861,
+      71.438,
+      73.982,
+      68.89,
+      63.955,
+      93.245,
+      79.937,
+      71.408,
+      75.346,
+      86.116,
+      57.606,
+      75.365,
+      65.316
+    ]
+  },
+  "match_stats": {
+    "remote_rows_with_stamp": 3350,
+    "local_rows_with_stamp": 2385,
+    "merged_rows": 2385,
+    "matched_sent_to_hand_rows": 217,
+    "local_message_count": 2402,
+    "local_sent_count": 217,
+    "remote_record_count": 3351
+  },
+  "segments_ms": {
+    "source_to_ros_host_callback_ms": {
+      "count": 2385,
+      "mean": 37.59080140964361,
+      "std": 2.557798699647971,
+      "p50": 36.816826,
+      "p95": 42.4168592,
+      "max": 67.988618,
+      "min": 34.020101,
+      "range": 33.968517000000006,
+      "zero_crossings": 824
+    },
+    "ros_host_callback_to_remote_rosbridge_client_ms": {
+      "count": 2385,
+      "mean": 5.576793340880507,
+      "std": 3.9361750801830953,
+      "p50": 4.019411,
+      "p95": 13.587599399999997,
+      "max": 18.924862,
+      "min": 0.7242,
+      "range": 18.200662,
+      "zero_crossings": 1115
+    },
+    "remote_rosbridge_to_local_arrival_ms": {
+      "count": 2385,
+      "mean": 24.043853928721216,
+      "std": 11.728786088131857,
+      "p50": 20.742208,
+      "p95": 46.5341796,
+      "max": 101.596758,
+      "min": 3.777039,
+      "range": 97.81971899999999,
+      "zero_crossings": 693
+    },
+    "local_arrival_to_parse_ms": {
+      "count": 2385,
+      "mean": 0.011660754716981133,
+      "std": 0.11064973157276371,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 1.5033,
+      "min": 0.0,
+      "range": 1.5033,
+      "zero_crossings": 54
+    },
+    "parse_to_pose_ms": {
+      "count": 2385,
+      "mean": 0.4037524109014677,
+      "std": 0.5138894613818705,
+      "p50": 0.0,
+      "p95": 1.1965799999999986,
+      "max": 1.9991,
+      "min": 0.0,
+      "range": 1.9991,
+      "zero_crossings": 1226
+    },
+    "local_arrival_to_command_selected_ms": {
+      "count": 333,
+      "mean": 0.5143015015015014,
+      "std": 0.5334783867757945,
+      "p50": 0.5033,
+      "p95": 1.2895799999999995,
+      "max": 1.9991,
+      "min": 0.0,
+      "range": 1.9991,
+      "zero_crossings": 162
+    },
+    "command_selected_to_send_thread_pick_ms": {
+      "count": 217,
+      "mean": 31.083121198156707,
+      "std": 18.986498872906694,
+      "p50": 31.432,
+      "p95": 62.98267999999998,
+      "max": 85.8176,
+      "min": 0.0,
+      "range": 85.8176,
+      "zero_crossings": 145
+    },
+    "command_selected_to_write_start_ms": {
+      "count": 217,
+      "mean": 31.083121198156707,
+      "std": 18.986498872906694,
+      "p50": 31.432,
+      "p95": 62.98267999999998,
+      "max": 85.8176,
+      "min": 0.0,
+      "range": 85.8176,
+      "zero_crossings": 145
+    },
+    "cmd_write_ms": {
+      "count": 217,
+      "mean": 41.030849308755734,
+      "std": 0.3639003474416942,
+      "p50": 40.9799,
+      "p95": 41.76534,
+      "max": 42.7417,
+      "min": 40.4199,
+      "range": 2.321800000000003,
+      "zero_crossings": 109
+    },
+    "source_to_cmd_write_end_aligned_ms": {
+      "count": 217,
+      "mean": 144.82185070046086,
+      "std": 26.426143298601204,
+      "p50": 141.745952,
+      "p95": 191.33791419999994,
+      "max": 261.519172,
+      "min": 102.296588,
+      "range": 159.22258400000004,
+      "zero_crossings": 141
+    }
+  },
+  "notes": [
+    "时钟偏移通过 SSH 往返采样估计，适合诊断量级，不等价于 PTP/NTP/Chrony 高精度同步。",
+    "remote_rosbridge_to_local_arrival_ms 已应用偏移修正，表示 10.42.0.3 rosbridge 到本机 roslibpy 回调的近似单向耗时。",
+    "source_to_cmd_write_end_aligned_ms 为从消息 source stamp 到 COM10 写入完成的近似全链路耗时。"
+  ]
+}

@@ -1,0 +1,9 @@
+mujoco==3.6.0
+dm_control==1.0.38
+numpy==2.4.3
+scipy==1.17.1
+matplotlib==3.10.8
+lxml==6.0.2
+PyYAML==6.0.3
+roslibpy==2.0.0
+wujihandpy

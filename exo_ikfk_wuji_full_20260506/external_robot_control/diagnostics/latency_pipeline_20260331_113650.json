@@ -1,0 +1,65 @@
+{
+  "mode": "latency-pipeline",
+  "duration_s": 20.0,
+  "mapping_mode": "nn",
+  "message_count": 2396,
+  "accepted_count": 271,
+  "dropped_count": 2125,
+  "drop_rate": 0.8868948247078464,
+  "message_interval_ms": {
+    "count": 2395,
+    "mean": 8.325586847599155,
+    "std": 18.315658170481775,
+    "p50": 0.9989,
+    "p95": 42.253069999999894,
+    "max": 209.3179,
+    "min": 0.0,
+    "range": 209.3179,
+    "zero_crossings": 991
+  },
+  "parse_ms": {
+    "count": 2155,
+    "mean": 0.012618515081206498,
+    "std": 0.11113293828895396,
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 1.5044,
+    "min": 0.0,
+    "range": 1.5044,
+    "zero_crossings": 56
+  },
+  "predict_ms": {
+    "count": 2155,
+    "mean": 0.31768779582366646,
+    "std": 0.4603624731012777,
+    "p50": 0.0,
+    "p95": 1.00939,
+    "max": 2.0258,
+    "min": 0.0,
+    "range": 2.0258,
+    "zero_crossings": 1116
+  },
+  "callback_ready_ms": {
+    "count": 2155,
+    "mean": 0.33124032482598664,
+    "std": 0.46513543120006334,
+    "p50": 0.0,
+    "p95": 1.01048,
+    "max": 2.0258,
+    "min": 0.0,
+    "range": 2.0258,
+    "zero_crossings": 1132
+  },
+  "source_to_arrival_ms": {
+    "count": 2155,
+    "mean": -1917.085702643617,
+    "std": 29.94192542134638,
+    "p50": -1927.427927,
+    "p95": -1859.1655523999998,
+    "max": -1724.621229,
+    "min": -1945.6038,
+    "range": 220.982571,
+    "zero_crossings": 382
+  },
+  "source_timestamp_present": true
+}

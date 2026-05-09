@@ -1,0 +1,191 @@
+{
+  "mode": "latency-fullchain",
+  "duration_s": 12.0,
+  "mapping_mode": "nn",
+  "modbus": "COM10",
+  "message_count": 1441,
+  "accepted_count": 199,
+  "dropped_count": 1242,
+  "sent_count": 131,
+  "replaced_before_send_count": 68,
+  "write_error_count": 0,
+  "drop_rate": 0.8619014573213046,
+  "accepted_but_not_written_count": 68,
+  "message_interval_ms": {
+    "count": 1440,
+    "mean": 8.335955138888894,
+    "std": 9.608827485407394,
+    "p50": 6.51835,
+    "p95": 24.035629999999987,
+    "max": 77.1402,
+    "min": 0.0,
+    "range": 77.1402,
+    "zero_crossings": 789
+  },
+  "arrival_to_parse_ms": {
+    "count": 1427,
+    "mean": 0.01443833216538192,
+    "std": 0.11800285736812989,
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 1.2155,
+    "min": 0.0,
+    "range": 1.2155,
+    "zero_crossings": 44
+  },
+  "parse_to_pose_ms": {
+    "count": 1427,
+    "mean": 0.38194449894884397,
+    "std": 0.4907602647731853,
+    "p50": 0.0,
+    "p95": 1.00897,
+    "max": 2.5618,
+    "min": 0.0,
+    "range": 2.5618,
+    "zero_crossings": 754
+  },
+  "parse_ms": {
+    "count": 1427,
+    "mean": 0.01443833216538192,
+    "std": 0.11800285736812989,
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 1.2155,
+    "min": 0.0,
+    "range": 1.2155,
+    "zero_crossings": 44
+  },
+  "predict_ms": {
+    "count": 1427,
+    "mean": 0.38194449894884397,
+    "std": 0.4907602647731853,
+    "p50": 0.0,
+    "p95": 1.00897,
+    "max": 2.5618,
+    "min": 0.0,
+    "range": 2.5618,
+    "zero_crossings": 754
+  },
+  "callback_ready_ms": {
+    "count": 1427,
+    "mean": 0.3963828311142258,
+    "std": 0.49441835328538203,
+    "p50": 0.0,
+    "p95": 1.01007,
+    "max": 2.5618,
+    "min": 0.0,
+    "range": 2.5618,
+    "zero_crossings": 776
+  },
+  "command_selected_to_send_thread_pick_ms": {
+    "count": 131,
+    "mean": 29.430791603053425,
+    "std": 17.68034957932192,
+    "p50": 28.5048,
+    "p95": 58.693200000000004,
+    "max": 69.8386,
+    "min": 0.0,
+    "range": 69.8386,
+    "zero_crossings": 91
+  },
+  "command_selected_to_write_start_ms": {
+    "count": 131,
+    "mean": 29.430791603053425,
+    "std": 17.68034957932192,
+    "p50": 28.5048,
+    "p95": 58.693200000000004,
+    "max": 69.8386,
+    "min": 0.0,
+    "range": 69.8386,
+    "zero_crossings": 91
+  },
+  "command_selected_to_write_end_ms": {
+    "count": 131,
+    "mean": 70.57182748091606,
+    "std": 17.665414737190705,
+    "p50": 69.6126,
+    "p95": 99.56465,
+    "max": 110.53,
+    "min": 41.3135,
+    "range": 69.2165,
+    "zero_crossings": 89
+  },
+  "cmd_write_ms": {
+    "count": 131,
+    "mean": 41.141035877862585,
+    "std": 0.4263016312118071,
+    "p50": 41.0492,
+    "p95": 42.07985,
+    "max": 43.1059,
+    "min": 40.3997,
+    "range": 2.7061999999999955,
+    "zero_crossings": 57
+  },
+  "source_to_arrival_raw_ms": {
+    "count": 1427,
+    "mean": 234.0724401716891,
+    "std": 10.56196584781199,
+    "p50": 230.658122,
+    "p95": 256.8557362,
+    "max": 295.035963,
+    "min": 222.601441,
+    "range": 72.43452199999999,
+    "zero_crossings": 475
+  },
+  "source_to_cmd_write_start_raw_ms": {
+    "count": 131,
+    "mean": 270.60956581679403,
+    "std": 25.367035453561087,
+    "p50": 269.46096,
+    "p95": 319.186962,
+    "max": 363.760463,
+    "min": 227.352665,
+    "range": 136.407798,
+    "zero_crossings": 81
+  },
+  "source_to_cmd_write_end_raw_ms": {
+    "count": 131,
+    "mean": 311.7506016946565,
+    "std": 25.318979353390052,
+    "p50": 310.47956,
+    "p95": 360.141612,
+    "max": 405.190563,
+    "min": 268.480965,
+    "range": 136.70959799999997,
+    "zero_crossings": 81
+  },
+  "source_to_cmd_write_start_normalized_ms": {
+    "count": 131,
+    "mean": 48.0081248167939,
+    "std": 25.36703545356108,
+    "p50": 46.859519000000006,
+    "p95": 96.58552100000003,
+    "max": 141.15902200000002,
+    "min": 4.751224000000008,
+    "range": 136.407798,
+    "zero_crossings": 81
+  },
+  "source_to_cmd_write_end_normalized_ms": {
+    "count": 131,
+    "mean": 89.1491606946565,
+    "std": 25.318979353390052,
+    "p50": 87.878119,
+    "p95": 137.540171,
+    "max": 182.589122,
+    "min": 45.87952400000003,
+    "range": 136.70959799999997,
+    "zero_crossings": 81
+  },
+  "source_to_arrival_baseline_ms": 222.601441,
+  "source_stamp_paths": {
+    "msg.header.stamp": 1427
+  },
+  "source_timestamp_present": true,
+  "clock_alignment_warning": null,
+  "notes": [
+    "latency-fullchain ????? bridge ? 20Hz callback rate limit ? 20Hz send loop ??",
+    "command_selected_to_write_start_ms ???????????????????????",
+    "source_to_cmd_write_*_normalized_ms = raw - min(source_to_arrival_raw_ms)?????????????",
+    "??? 10.42.0.3 ? ROS/rosbridge ????????? ros_host_bridge_probe.py"
+  ]
+}

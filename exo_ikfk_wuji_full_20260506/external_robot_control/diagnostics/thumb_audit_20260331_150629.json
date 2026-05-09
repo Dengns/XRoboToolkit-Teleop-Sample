@@ -1,0 +1,157 @@
+{
+  "mode": "thumb-audit",
+  "thumb_slots": {
+    "thumb_cmc_pitch": {
+      "label": "拇指弯曲",
+      "runs": 10,
+      "frames": 1463,
+      "primary_joint_in_calibration": "joint_RightSkeletonThumbBase",
+      "primary_joint_in_joint_map_output": "joint_RightSkeletonThumbBase",
+      "finger_joints": [
+        "joint_RightSkeletonThumb1",
+        "joint_RightSkeletonThumb2",
+        "joint_RightSkeletonThumb3",
+        "joint_RightSkeletonThumb4",
+        "joint_RightSkeletonThumbBase"
+      ],
+      "top_candidates": [
+        "joint_RightSkeletonThumb4",
+        "joint_RightSkeletonThumbBase",
+        "joint_RightSkeletonThumb2"
+      ],
+      "feature_metrics": [
+        {
+          "joint_name": "joint_RightSkeletonThumb4",
+          "dynamic_range": 1.1326518058776855,
+          "pearson_corr": 0.9247050593071149,
+          "monotonicity": 0.951758350977269,
+          "candidate_score": 0.9403505408774496
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumbBase",
+          "dynamic_range": 0.17525729537010193,
+          "pearson_corr": 0.8866527269527272,
+          "monotonicity": 0.9125249818809263,
+          "candidate_score": 0.8212223145034796
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumb2",
+          "dynamic_range": 0.4065047318684023,
+          "pearson_corr": 0.7846952050656419,
+          "monotonicity": 0.7609818854612838,
+          "candidate_score": 0.7350013354128854
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumb1",
+          "dynamic_range": 0.25558143774668374,
+          "pearson_corr": -0.7338073159499778,
+          "monotonicity": 0.7915642189525602,
+          "candidate_score": 0.7003185279218637
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumb3",
+          "dynamic_range": 0.0381484413146973,
+          "pearson_corr": -0.043293345286647356,
+          "monotonicity": 0.0313153369745249,
+          "candidate_score": 0.038738672581793934
+        }
+      ]
+    },
+    "thumb_cmc_yaw": {
+      "label": "拇指侧摆",
+      "runs": 10,
+      "frames": 1595,
+      "primary_joint_in_calibration": "joint_RightSkeletonThumbBase",
+      "primary_joint_in_joint_map_output": "joint_RightSkeletonThumbBase",
+      "finger_joints": [
+        "joint_RightSkeletonThumb1",
+        "joint_RightSkeletonThumb2",
+        "joint_RightSkeletonThumb3",
+        "joint_RightSkeletonThumb4",
+        "joint_RightSkeletonThumbBase"
+      ],
+      "top_candidates": [
+        "joint_RightSkeletonThumb3",
+        "joint_RightSkeletonThumbBase",
+        "joint_RightSkeletonThumb1"
+      ],
+      "feature_metrics": [
+        {
+          "joint_name": "joint_RightSkeletonThumb3",
+          "dynamic_range": 0.8013277053833008,
+          "pearson_corr": -0.9587524816257046,
+          "monotonicity": 0.957015153629264,
+          "candidate_score": 0.9575931779933354
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumbBase",
+          "dynamic_range": 0.5756043235408228,
+          "pearson_corr": 0.8628629901663292,
+          "monotonicity": 0.8776744327703931,
+          "candidate_score": 0.8494302273922238
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumb1",
+          "dynamic_range": 0.8414025040414891,
+          "pearson_corr": -0.8016329093312569,
+          "monotonicity": 0.7580832321808691,
+          "candidate_score": 0.8084047152530148
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumb2",
+          "dynamic_range": 0.3282825613962572,
+          "pearson_corr": 0.748873130929138,
+          "monotonicity": 0.8091439751367226,
+          "candidate_score": 0.7310831852435639
+        },
+        {
+          "joint_name": "joint_RightSkeletonThumb4",
+          "dynamic_range": 0.2428603172302246,
+          "pearson_corr": 0.3413197707738664,
+          "monotonicity": 0.39237667357189304,
+          "candidate_score": 0.3513686147700146
+        }
+      ]
+    }
+  },
+  "joint_map": {
+    "thumb_cmc_pitch": "joint_RightSkeletonThumbBase",
+    "thumb_cmc_yaw": "joint_RightSkeletonThumbBase",
+    "index_mcp_pitch": "joint_RightSkeletonIndex4",
+    "middle_mcp_pitch": "joint_RightSkeletonMiddle4",
+    "ring_mcp_pitch": "joint_RightSkeletonRing4",
+    "pinky_mcp_pitch": "joint_RightSkeletonPinky4"
+  },
+  "joint_map_output": {
+    "thumb_cmc_pitch": "joint_RightSkeletonThumbBase",
+    "thumb_cmc_yaw": "joint_RightSkeletonThumbBase",
+    "index_mcp_pitch": "joint_RightSkeletonIndex4",
+    "middle_mcp_pitch": "joint_RightSkeletonMiddle4",
+    "ring_mcp_pitch": "joint_RightSkeletonRing4",
+    "pinky_mcp_pitch": "joint_RightSkeletonPinky4"
+  },
+  "nn_model_slots": [
+    "thumb_cmc_pitch",
+    "thumb_cmc_yaw",
+    "index_mcp_pitch",
+    "middle_mcp_pitch",
+    "ring_mcp_pitch",
+    "pinky_mcp_pitch"
+  ],
+  "findings": [
+    "当前拇指两个槽位共用主关节: joint_RightSkeletonThumbBase",
+    "拇指 pitch / yaw 两个槽位使用了完全相同的 thumb feature 集合"
+  ],
+  "overlap": {
+    "same_primary_joint": true,
+    "shared_feature_ratio": 1.0,
+    "shared_features": [
+      "joint_RightSkeletonThumb1",
+      "joint_RightSkeletonThumb2",
+      "joint_RightSkeletonThumb3",
+      "joint_RightSkeletonThumb4",
+      "joint_RightSkeletonThumbBase"
+    ],
+    "range_overlap_corr": -0.7864691970513504
+  }
+}

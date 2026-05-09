@@ -1,0 +1,10 @@
+# 仅当需要运行 external_robot_control 中 LinkerHand/O6/O7 旧桥接或诊断脚本时安装。
+pymodbus==3.5.1
+pyserial==3.5
+PyYAML==6.0.3
+numpy==2.4.3
+
+# CAN 透明盒或 CAN 调试需要时再安装：
+# python-can
+# python-can-candle
+# minimalmodbus
