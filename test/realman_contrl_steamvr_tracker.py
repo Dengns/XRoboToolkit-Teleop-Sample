@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import select
 import sys
 import termios
@@ -44,13 +45,13 @@ DEFAULT_ARM_IP = "10.10.10.100"
 DEFAULT_ARM_PORT = 8080
 DEFAULT_CONTROL_RATE_HZ = 50                
 DEFAULT_XYZ_SCALE_FACTOR = 1.0
+SCALE_OPTIONS = (0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0)
 DEFAULT_XYZ_AXIS_MAP = (0, 1, 2)
 DEFAULT_ROTVEC_AXIS_MAP = (1, 0, 2)
 DEFAULT_ROTVEC_AXIS_SIGN = (-1.0, 1.0, 1.0)
 DEFAULT_WORLD_YAW_OFFSET_DEG = 0.0
 DEFAULT_MAX_DELTA_M = 0.25
-DEFAULT_HOLD_KEY = "space"
-DEFAULT_HOLD_RELEASE_TIMEOUT_S = 0.7
+DEFAULT_TOGGLE_KEY = "space"
 DEFAULT_POSE_LOG_INTERVAL_S = 1.0
 
 
@@ -78,6 +79,12 @@ class TrackerPoseSample:
     project_world_quat_wxyz: np.ndarray
     control_xyz: np.ndarray
     control_quat_wxyz: np.ndarray
+
+
+@dataclass(frozen=True)
+class KeyCommand:
+    action: str
+    value: int | None = None
 
 
 def read_arm_pose(arm: RM75BInterface) -> np.ndarray:
@@ -333,6 +340,16 @@ def clip_delta(delta_xyz: np.ndarray) -> np.ndarray:
     return np.clip(delta_xyz, -DEFAULT_MAX_DELTA_M, DEFAULT_MAX_DELTA_M)
 
 
+def format_scale_options() -> str:
+    """格式化离散 scale 档位，便于日志展示。"""
+    return ",".join(f"{scale:g}" for scale in SCALE_OPTIONS)
+
+
+def find_nearest_scale_index(scale: float) -> int:
+    """返回与当前 scale 最接近的离散档位索引。"""
+    return min(range(len(SCALE_OPTIONS)), key=lambda index: abs(SCALE_OPTIONS[index] - scale))
+
+
 class SteamVrTrackerReader:
     """读取 SteamVR/OpenVR 中第一个可用 tracker 的位姿。"""
 
@@ -425,54 +442,88 @@ class SteamVrTrackerReader:
         openvr.shutdown()
 
 
-class TerminalHoldKeyMonitor:
-    """终端按键保持器。
+class TerminalKeyMonitor:
+    """终端即时按键监听器。
 
-    终端没有原生 key release 事件，这里依赖系统按键重复：
-    在 release_timeout 时间内持续收到同一个键的重复输入时认为“仍按住”，
-    超时则认为已经松开。
+    通过 cbreak 模式逐字节读取终端输入，不需要回车即可执行：
+    - Space: 切换跟随启停
+    - 上/下方向键: 调整 xyz scale 档位
+    - 数字 1-9: 直接切到预设 xyz scale 档位
     """
 
-    def __init__(self, hold_key: str, release_timeout_s: float):
+    def __init__(self, toggle_key: str):
         if not sys.stdin.isatty():
             raise RuntimeError("当前标准输入不是 TTY，无法在终端模式下监听按键。")
 
-        self.hold_key = hold_key
-        self.release_timeout_s = release_timeout_s
-        self.is_pressed = False
+        self.toggle_key = toggle_key
         self.should_exit = False
         self.fd = sys.stdin.fileno()
-        self.last_key_time = 0.0
         self.original_termios = termios.tcgetattr(self.fd)
+        self.buffer = bytearray()
+        self.pending_commands: list[KeyCommand] = []
         tty.setcbreak(self.fd)
 
         print(
             "[INFO] 当前使用终端按键模式："
-            "请保持终端焦点并按住 Space。"
-            "终端模式依赖系统按键重复，松开后停止可能有轻微延迟。"
+            "请保持终端焦点。"
+            "空格切换开始/停止跟随，方向键上/下调节 xyz scale，数字键 1-9 直接切换预设 scale 档位。"
         )
 
     def _matches(self, char: str) -> bool:
-        if self.hold_key == "space":
+        if self.toggle_key == "space":
             return char == " "
-        return char.strip().lower() == self.hold_key
+        return char.strip().lower() == self.toggle_key
+
+    def _append_command(self, action: str, value: int | None = None):
+        self.pending_commands.append(KeyCommand(action=action, value=value))
+
+    def _drain_buffer(self):
+        while self.buffer:
+            first = self.buffer[0]
+            if first in (0x03, 0x04):
+                del self.buffer[:1]
+                self.should_exit = True
+                return
+
+            if first == 0x1B:
+                if len(self.buffer) == 1:
+                    return
+                if self.buffer[1] not in (0x5B, 0x4F):
+                    del self.buffer[:1]
+                    continue
+                if len(self.buffer) < 3:
+                    return
+
+                escape_code = self.buffer[2]
+                del self.buffer[:3]
+                if escape_code == ord("A"):
+                    self._append_command("scale_up")
+                elif escape_code == ord("B"):
+                    self._append_command("scale_down")
+                continue
+
+            char = chr(first)
+            del self.buffer[:1]
+            if self._matches(char):
+                self._append_command("toggle")
+            elif "1" <= char <= "9":
+                self._append_command("scale_digit", int(char))
 
     def poll(self):
         while True:
             ready, _, _ = select.select([sys.stdin], [], [], 0.0)
             if not ready:
                 break
+            chunk = os.read(self.fd, 64)
+            if not chunk:
+                break
+            self.buffer.extend(chunk)
+            self._drain_buffer()
 
-            char = sys.stdin.read(1)
-            if char in {"\x03", "\x04"}:
-                self.should_exit = True
-                return
-            if self._matches(char):
-                self.is_pressed = True
-                self.last_key_time = time.monotonic()
-
-        if self.is_pressed and (time.monotonic() - self.last_key_time) > self.release_timeout_s:
-            self.is_pressed = False
+    def get_commands(self) -> list[KeyCommand]:
+        commands = self.pending_commands[:]
+        self.pending_commands.clear()
+        return commands
 
     def close(self):
         try:
@@ -482,13 +533,13 @@ class TerminalHoldKeyMonitor:
 
 
 class RealmanSteamVrTrackerTeleop:
-    """按住空格时，用 SteamVR 单个 tracker 相对位姿驱动 RM75-B。"""
+    """空格切换启停，用 SteamVR 单个 tracker 相对位姿驱动 RM75-B。"""
 
     def __init__(self, config: TeleopConfig):
         self.config = config
         self.arm: RM75BInterface | None = None
         self.tracker_reader: SteamVrTrackerReader | None = None
-        self.key_monitor: TerminalHoldKeyMonitor | None = None
+        self.key_monitor: TerminalKeyMonitor | None = None
 
         self.active_tracker_serial: str | None = None
         self.tracker_origin_transform: np.ndarray | None = None
@@ -496,6 +547,8 @@ class RealmanSteamVrTrackerTeleop:
         self.tracker_origin_quat_wxyz: np.ndarray | None = None
         self.arm_origin_xyz: np.ndarray | None = None
         self.arm_origin_quat_wxyz: np.ndarray | None = None
+        self.teleop_enabled = False
+        self.xyz_scale_factor = self.config.xyz_scale_factor
         self.was_active = False
         self.waiting_for_tracker_pose = False
         self.last_tracker_pose_error: str | None = None
@@ -504,9 +557,10 @@ class RealmanSteamVrTrackerTeleop:
 
         self.init_hardware()
         self.log_info(
-            "初始化完成：按住空格开始控制，松开空格停止跟随。"
-            "按下空格瞬间的 tracker 本体坐标系会作为本次控制参考系。"
+            "初始化完成：按一次空格开始控制，再按一次空格停止跟随。"
+            "开始控制瞬间的 tracker 本体坐标系会作为本次控制参考系。"
         )
+        self.log_info(f"当前 tracker xyz scale={self.xyz_scale_factor:g}，预设档位: {format_scale_options()}")
 
     def log_info(self, message: str):
         print(f"[INFO] {message}")
@@ -516,13 +570,13 @@ class RealmanSteamVrTrackerTeleop:
 
     def init_hardware(self):
         self.tracker_reader = SteamVrTrackerReader(self.config.world_yaw_offset_deg)
-        self.key_monitor = TerminalHoldKeyMonitor(DEFAULT_HOLD_KEY, DEFAULT_HOLD_RELEASE_TIMEOUT_S)
+        self.key_monitor = TerminalKeyMonitor(DEFAULT_TOGGLE_KEY)
         self.arm = RM75BInterface(self.config.arm_ip, self.config.arm_port, enable_gripper=False)
         current_pose = read_arm_pose(self.arm)
         self.log_info(f"机械臂连接成功，当前末端位姿: {current_pose.tolist()}")
         self.log_info(
             f"当前控制参数: xyz_axis_map={self.config.xyz_axis_map}, "
-            f"xyz_scale={self.config.xyz_scale_factor}, "
+            f"xyz_scale={self.xyz_scale_factor}, "
             f"rotvec_axis_map={self.config.rotvec_axis_map}, "
             f"rotvec_axis_sign={self.config.rotvec_axis_sign}, "
             f"xyz_reference_to_target={R_REFERENCE_TO_TARGET.tolist()}"
@@ -533,7 +587,45 @@ class RealmanSteamVrTrackerTeleop:
         self.key_monitor.poll()
         if self.key_monitor.should_exit:
             raise KeyboardInterrupt
-        return self.key_monitor.is_pressed
+        for command in self.key_monitor.get_commands():
+            self.handle_key_command(command)
+        return self.teleop_enabled
+
+    def handle_key_command(self, command: KeyCommand):
+        if command.action == "toggle":
+            self.teleop_enabled = not self.teleop_enabled
+            state_text = "启动" if self.teleop_enabled else "停止"
+            self.log_info(f"空格触发：{state_text} SteamVR Tracker 遥操。")
+            return
+
+        if command.action == "scale_up":
+            self.adjust_scale_by_step(1, "方向键上")
+            return
+
+        if command.action == "scale_down":
+            self.adjust_scale_by_step(-1, "方向键下")
+            return
+
+        if command.action == "scale_digit" and command.value is not None:
+            self.set_scale_by_digit(command.value)
+
+    def adjust_scale_by_step(self, direction: int, source: str):
+        current_index = find_nearest_scale_index(self.xyz_scale_factor)
+        next_index = max(0, min(len(SCALE_OPTIONS) - 1, current_index + direction))
+        if next_index == current_index:
+            self.log_info(f"{source}：tracker xyz scale 已在边界 {self.xyz_scale_factor:g}")
+            return
+
+        self.xyz_scale_factor = SCALE_OPTIONS[next_index]
+        self.log_info(f"{source}：tracker xyz scale 调整为 {self.xyz_scale_factor:g}")
+
+    def set_scale_by_digit(self, digit: int):
+        if not 1 <= digit <= len(SCALE_OPTIONS):
+            self.log_warning(f"数字键 {digit} 超出可用 scale 档位范围。")
+            return
+
+        self.xyz_scale_factor = SCALE_OPTIONS[digit - 1]
+        self.log_info(f"数字键 {digit}：tracker xyz scale 调整为 {self.xyz_scale_factor:g}")
 
     def read_tracker_pose(self) -> TrackerPoseSample:
         assert self.tracker_reader is not None
@@ -602,6 +694,7 @@ class RealmanSteamVrTrackerTeleop:
             f"  project_world_xyz={np.round(tracker_sample.project_world_xyz, 4).tolist()}, project_world_rpy_deg={np.round(project_world_rpy_deg, 2).tolist()}",
             f"  control_xyz={np.round(tracker_sample.control_xyz, 4).tolist()}, control_rpy_deg={np.round(control_rpy_deg, 2).tolist()}, world_yaw_offset_deg={self.config.world_yaw_offset_deg}",
             f"  rotvec_axis_map={self.config.rotvec_axis_map}, rotvec_axis_sign={self.config.rotvec_axis_sign}",
+            f"  current_xyz_scale={self.xyz_scale_factor:g}",
         ]
         if raw_delta_xyz is not None and mapped_delta_xyz is not None:
             message_lines.append(
@@ -626,12 +719,12 @@ class RealmanSteamVrTrackerTeleop:
         assert self.arm is not None
         ret = self.arm.arm.rm_set_arm_slow_stop()
         if ret != 0:
-            self.log_warning(f"松开空格后缓停指令返回异常: ret={ret}")
+            self.log_warning(f"停止跟随后缓停指令返回异常: ret={ret}")
 
         self.clear_control_state()
         self.waiting_for_tracker_pose = False
         self.last_tracker_pose_error = None
-        self.log_info("空格已松开，停止发送控制并清空 tracker 原点。")
+        self.log_info("已停止发送控制并清空 tracker 原点。")
 
     def fail_safe_stop(self, reason: str):
         assert self.arm is not None
@@ -670,7 +763,7 @@ class RealmanSteamVrTrackerTeleop:
         if first_pause or now - self.last_warn_time > 1.0:
             self.log_warning(
                 f"{reason}；当前暂停发送控制，等待 tracker 恢复有效 pose。"
-                "恢复后若仍按住空格，将以恢复瞬间重新建立控制原点。"
+                "恢复后若当前仍处于启用状态，将以恢复瞬间重新建立控制原点。"
             )
             self.last_warn_time = now
 
@@ -699,7 +792,7 @@ class RealmanSteamVrTrackerTeleop:
         delta_transform = np.linalg.inv(self.tracker_origin_transform) @ tracker_sample.raw_transform
         raw_delta_xyz = delta_transform[:3, 3].astype(float)
         raw_delta_xyz = R_REFERENCE_TO_TARGET @ raw_delta_xyz
-        delta_xyz = raw_delta_xyz[list(self.config.xyz_axis_map)] * self.config.xyz_scale_factor
+        delta_xyz = raw_delta_xyz[list(self.config.xyz_axis_map)] * self.xyz_scale_factor
         delta_xyz = clip_delta(delta_xyz)
 
         raw_delta_quat_wxyz = quaternion_multiply_wxyz(

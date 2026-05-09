@@ -25,7 +25,7 @@
 | `test/test_pose_precision.py` | `run_monitor_test` / `run_drift_test` / `run_move_test` | 实时定位观察、零飘统计与位移精度评估 | 同时输出 world 与 head-relative 两套结果 |
 | `test/realman_contrl_lxqs.py` | `RealmanXrIncrementalTeleop` / `read_controller_pose` / `read_arm_pose` / `record_grip_press_event` / `log_grip_release_comparison` | 使用 Pico 右手柄按住 grip 后的相对 xyz+rpy 位姿直连控制 RM75-B 末端，并在 grip 按下/松开时记录手柄与机械臂位姿做 scale 感知 xyz 偏移对比 | 依赖 `XrClient`、`RM75BInterface`、RealMan `rm_movep_canfd`；ROS2 发布为可选 |
 | `test/realman_contrl_motion_tracker.py` | `RealmanMotionTrackerTeleop` / `read_motion_tracker_pose` / `iter_motion_tracker_pose_values` / `parse_pose_7d` / `record_a_start_event` / `log_a_stop_event_comparison` | 使用 Pico Motion Tracker 的相对 xyz+rpy 位姿直连控制 RM75-B 末端，A 键切换启停并记录启停事件 xyz 偏移对比，B 键复位，右摇杆调 scale，支持固定复位末端位姿 | 不按 SN 过滤，兼容 `pose` 和原始 `joints[*].p`；依赖 RealMan `rm_movep_canfd` |
-| `test/realman_contrl_steamvr_tracker.py` | `RealmanSteamVrTrackerTeleop` / `SteamVrTrackerReader` / `TerminalHoldKeyMonitor` / `convert_openvr_pose` / `build_z_axis_rotation_matrix` / `log_pose_debug` | 使用 SteamVR/OpenVR 单个 Vive Tracker 的相对 xyz 与姿态增量控制 RM75-B，按住终端中的空格键时跟随、松开即缓停；支持在 OpenVR 绝对位姿映射后再追加一层水平朝向校准，并按低频打印 raw/project_world/control 三套位姿证据用于现场校轴；旋转映射支持独立配置 rotvec 通道顺序与方向 | 固定使用 OpenVR standing universe + 项目 `R_HEADSET_TO_WORLD` 坐标变换；新增 `--world-yaw-offset-deg`、`--debug-pose`、`--pose-log-interval`、`--rotvec-axis-map`、`--rotvec-axis-sign`；通过 RealMan 7 维四元数位姿透传 |
+| `test/realman_contrl_steamvr_tracker.py` | `RealmanSteamVrTrackerTeleop` / `SteamVrTrackerReader` / `TerminalKeyMonitor` / `KeyCommand` / `convert_openvr_pose` / `build_z_axis_rotation_matrix` / `log_pose_debug` | 使用 SteamVR/OpenVR 单个 Vive Tracker 的相对 xyz 与姿态增量控制 RM75-B，空格键切换开始/停止跟随；支持终端中通过 `↑/↓` 或数字键 `1-9` 即时调整 xyz 映射比例，并在 OpenVR 绝对位姿映射后再追加一层水平朝向校准，同时按低频打印 raw/project_world/control 三套位姿证据用于现场校轴；旋转映射支持独立配置 rotvec 通道顺序与方向 | 固定使用 OpenVR standing universe + 项目 `R_HEADSET_TO_WORLD` 坐标变换；新增终端即时按键事件监听与离散 `xyz scale` 档位；支持 `--world-yaw-offset-deg`、`--debug-pose`、`--pose-log-interval`、`--rotvec-axis-map`、`--rotvec-axis-sign`；通过 RealMan 7 维四元数位姿透传 |
 | `test/steamvr_tracker_body_frame_probe.py` | `run_probe` / `read_tracker_pose` / `print_body_axes` / `print_reference_delta` | 只读观察 SteamVR/Vive Tracker 本体坐标系：打印 tracker 局部 +X/+Y/+Z 在 OpenVR standing universe 中的方向，并在启动瞬间锁定初始化参考系后持续输出相对 xyz/姿态增量 | 不连接机械臂；直接使用 OpenVR 原始位姿矩阵列向量识别 tracker 本体轴；用于后续把 tracker 与机械臂同向摆放后建立与基站摆放无关的初始化参考系 |
 | `test/realman_coordinate_system.py` | `run_coordinate_test` / `stream_pose` / `build_axis_target` | 通过固定原点和 xyz 正负 10cm 往返移动验证 RM75 Base 坐标系方向 | 依赖 `RM75BInterface`、RealMan `rm_movep_canfd` |
 | `scripts/simulation/teleop_pico_motion_tracker.py` | `MotionTrackerVisualizer` / `iter_motion_tracker_pose_values` / `convert_pose_to_visual_coordinate` | 从 Pico Motion Tracker 读取 pose，在 MeshCat 中按 Pico 原始坐标系可视化 tracker 位置、局部坐标轴和读取 FPS | 默认 `raw_pico` 坐标；可用 `--coordinate-mode project_world` 切换到项目 world 坐标 |
@@ -482,4 +482,21 @@
   - 修改后验证：
     - `teleop_exo_to_wuji_left.py --help` 继续正常。
     - `fangzhenyingshe/tests` 的 11 个单元测试继续全部通过。
-    - `teleop_exo_to_wuji_left.py --dry-run` 不再报“外部项目目录不存在”，而是继续执行到 `RealtimeSkeletonStream.start()` 后因 `roslibpy.core.RosTimeoutError: Failed to connect to ROS` 停止，说明默认路径修复已生效；当前剩余阻塞仅在用户明确要求暂时跳过的 rosbridge/ROS 连接部分。
+  - `teleop_exo_to_wuji_left.py --dry-run` 不再报“外部项目目录不存在”，而是继续执行到 `RealtimeSkeletonStream.start()` 后因 `roslibpy.core.RosTimeoutError: Failed to connect to ROS` 停止，说明默认路径修复已生效；当前剩余阻塞仅在用户明确要求暂时跳过的 rosbridge/ROS 连接部分。
+
+### [2026-05-09]
+- **更新类型**: Feature / Test
+- **修改目的/Bug现象**:
+  - 用户要求修改 `test/realman_contrl_steamvr_tracker.py` 的交互方式：
+    - 跟随过程中可通过键盘即时调节 xyz 映射比例。
+    - 将原“按住空格持续跟随，松开停止”的逻辑，改为“按一次开始，再按一次结束”的切换逻辑。
+    - 两类输入都尽量做到无需回车，按键后立即执行。
+  - 代码证据显示原脚本使用 `TerminalHoldKeyMonitor`，基于终端按键重复模拟“按住 Space”；该结构只能表达按住/松开，不能直接支持切换式启停和多类即时按键命令。
+- **具体修改内容**:
+  - 将 `TerminalHoldKeyMonitor` 重构为 `TerminalKeyMonitor`，继续沿用 `tty.setcbreak()` + `select` 的逐字节终端读取方式，保证空格、方向键、数字键均可“不回车立即执行”。
+  - 新增 `KeyCommand` 事件模型，支持：
+    - 空格键切换 `teleop_enabled` 启停状态。
+    - `↑/↓` 在离散 `xyz scale` 档位间增减。
+    - 数字键 `1-9` 直接切换到预设 `xyz scale` 档位。
+  - 将 SteamVR Tracker 控制状态从“按住时 active”改为“切换式启停”，并把 `xyz_scale_factor` 从固定配置值改为运行时可变状态，使比例调整立即影响后续 `rm_movep_canfd()` 目标位姿。
+  - 同步更新 `test/realman_contrl_steamvr_tracker_usage.md`，把使用说明改为“空格开始/空格停止”，并补充 `↑/↓`、`1-9` 对应的即时调参说明与预设比例表。
